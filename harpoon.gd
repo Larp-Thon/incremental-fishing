@@ -89,15 +89,22 @@ func _process(delta: float) -> void:
 			global_position += dir * step
 			traveled += step
 			var tip_to: Vector3 = global_transform * TIP
+			var ray := PhysicsRayQueryParameters3D.create(tip_from, tip_to, 0xFFFFFFFF, [player.get_rid()])
+			var wall: Dictionary = get_world_3d().direct_space_state.intersect_ray(ray)
+			if not wall.is_empty():
+				tip_to = wall.position
+			var hit_fish := false
 			# Segmento recorrido por la punta este frame: no atraviesa peces aunque bajen los FPS.
 			for fish in get_tree().get_nodes_in_group("fish"):
 				var p: Vector3 = fish.global_position
-				if not fish.hooked and Geometry3D.get_closest_point_to_segment(p, tip_from, tip_to).distance_to(p) < fish.hit_radius:
-					hooked = fish
-					fish.hooked = true
+				if not fish.hooked and not fish.hidden and Geometry3D.get_closest_point_to_segment(p, tip_from, tip_to).distance_to(p) < fish.hit_radius:
+					hit_fish = true
+					if fish.take_harpoon_hit(1 + main.lvl("net")):
+						hooked = fish
+					else:
+						main.show_toast("¡Se resiste! Quedan %d impactos" % fish.hp, Color(1.0, 0.65, 0.35))
 					break
-			var ray := PhysicsRayQueryParameters3D.create(tip_from, tip_to, 0xFFFFFFFF, [player.get_rid()])
-			if hooked or traveled >= main.reach() or get_world_3d().direct_space_state.intersect_ray(ray):
+			if hit_fish or traveled >= main.reach() or not wall.is_empty():
 				state = BACK
 				main.scare(tip_to, 9.0)  # acierte o falle, los peces de alrededor huyen
 		BACK:

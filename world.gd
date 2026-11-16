@@ -9,13 +9,14 @@ const SLOPE := 6.0  # media anchura de la rampa entre terrazas
 const GROUND := [Color(0.86, 0.78, 0.58), Color(0.5, 0.58, 0.42), Color(0.4, 0.42, 0.46), Color(0.27, 0.29, 0.36), Color(0.19, 0.19, 0.25), Color(0.11, 0.11, 0.15)]
 const CLIFF := Color(0.45, 0.42, 0.4)
 
-# Material de mejora del traje que se recoge en cada zona (hay 5 por zona).
+# Material de mejora/recetas que se recoge en cada zona.
 const MATERIALS := [
 	{name = "Perla", color = Color(1.0, 1.0, 1.0)},
 	{name = "Espina de erizo", color = Color(0.75, 0.4, 1.0)},
 	{name = "Perla negra", color = Color(0.35, 0.4, 0.85)},
 	{name = "Cristal", color = Color(0.3, 1.0, 0.9)},
 	{name = "Azufre", color = Color(1.0, 0.9, 0.2)},
+	{name = "Fragmento abisal", color = Color(0.6, 0.35, 1.0)},
 ]
 
 var pickups: Array[MeshInstance3D] = []  # materiales aún sin recoger; meta "zone"
@@ -228,3 +229,5 @@ func decorate() -> void:
 	# Zona 6 · Fosa: agujas de cristal.
 	for i in 50:
 		prop("cone", clear_spot(5, 4.0), Vector3(randf_range(1.0, 2.5), randf_range(4.0, 14.0), randf_range(1.0, 2.5)), Color(0.5, 0.35, 0.9), 0.7, tilt(0.3), true)
+	for i in 5:
+		pickup(5, clear_spot(5, 3.0) + Vector3.UP * 1.0)

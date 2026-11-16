@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://world.gd" id="8"]
 [ext_resource type="Script" path="res://sfx.gd" id="9"]
 [ext_resource type="Script" path="res://menu.gd" id="10"]
+[ext_resource type="Script" path="res://juice.gd" id="11"]
 
 [sub_resource type="SphereShape3D" id="player_shape"]
 radius = 0.4
@@ -85,6 +86,9 @@ script = ExtResource("3")
 
 [node name="Sfx" type="Node" parent="."]
 script = ExtResource("9")
+
+[node name="Juice" type="Node3D" parent="."]
+script = ExtResource("11")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
@@ -336,10 +340,19 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 
-[node name="Buttons" type="VBoxContainer" parent="HUD/Shop/Margin/Upgrades"]
+[node name="Buttons" type="ScrollContainer" parent="HUD/Shop/Margin/Upgrades"]
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="List" type="VBoxContainer" parent="HUD/Shop/Margin/Upgrades/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 6
+
+[node name="Prestige" type="Button" parent="HUD/Shop/Margin/Upgrades"]
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 16
 
 [node name="Start" type="Button" parent="HUD/Shop/Margin/Upgrades"]
 layout_mode = 2

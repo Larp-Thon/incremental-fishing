@@ -3,6 +3,7 @@ extends Node3D
 # La cadena luminosa baja hasta el fondo para encontrarla desde abajo.
 
 var body := StaticBody3D.new()  # colisión de las piezas en forma de caja
+var modules := {}
 
 
 func _ready() -> void:
@@ -40,3 +41,32 @@ func part(mesh: PrimitiveMesh, size: Vector3, pos: Vector3, color: Color, glow :
 		c.shape = shape
 		c.position = pos
 		body.add_child(c)
+
+
+func add_module(module_id: String, level: int) -> void:
+	var previous := int(modules.get(module_id, 0))
+	if level <= previous:
+		return
+	modules[module_id] = level
+	for index in range(previous + 1, level + 1):
+		var side := -1.0 if index % 2 == 1 else 1.0
+		var x := side * (1.7 + float(index - 1) * 0.8)
+		var z := 1.4
+		if module_id == "lab":
+			z = 0.0
+		elif module_id == "traps":
+			z = -1.4
+		elif module_id == "warehouse":
+			z = 2.2
+		match module_id:
+			"aquarium":
+				part(BoxMesh.new(), Vector3(1.0, 0.8, 0.8), Vector3(x, 0.85, z), Color(0.25, 0.65, 0.78))
+				part(SphereMesh.new(), Vector3(0.35, 0.35, 0.35), Vector3(x, 0.9, z), Color(0.4, 0.9, 0.75), 1.0)
+			"lab":
+				part(BoxMesh.new(), Vector3(1.2, 0.7, 0.9), Vector3(x, 0.8, z), Color(0.32, 0.35, 0.45))
+				part(CylinderMesh.new(), Vector3(0.25, 0.5, 0.25), Vector3(x, 1.35, z), Color(0.35, 0.9, 1.0), 1.5)
+			"traps":
+				part(CylinderMesh.new(), Vector3(0.38, 0.38, 0.38), Vector3(x, 0.75, z), Color(0.9, 0.65, 0.2))
+			"warehouse":
+				part(BoxMesh.new(), Vector3(1.1, 0.8, 0.9), Vector3(x, 0.85, z), Color(0.3, 0.4, 0.5))
+				part(BoxMesh.new(), Vector3(0.75, 0.45, 0.06), Vector3(x, 0.9, z - 0.49), Color(0.7, 0.8, 0.85))

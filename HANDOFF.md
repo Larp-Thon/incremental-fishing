@@ -6,7 +6,7 @@ Juego incremental **activo** en 3D y primera persona: eres un buzo que pesca con
 
 - **Motor**: Godot 4.7.2 (Forward+), GDScript. Sin dependencias ni assets externos.
 - **Cómo abrirlo**: importar `project.godot` en Godot y pulsar F5. La escena principal es `main.tscn`.
-- **Sin control de versiones**: la carpeta no es un repositorio git todavía.
+- **Git**: repositorio activo en la rama `chatsito`.
 - **Estilo visual**: low-poly de colores planos, sin texturas. Todo el decorado se genera por código con cajas, esferas, conos y cilindros. La atmósfera (niebla, luz que baja con la profundidad, brillo de peces) hace el trabajo pesado.
 - **Principio de diseño**: las mejoras amplifican lo que el jugador hace con las manos, no lo reemplazan.
 
@@ -17,6 +17,9 @@ Juego incremental **activo** en 3D y primera persona: eres un buzo que pesca con
 | WASD | Nadar hacia donde miras |
 | Espacio / Ctrl | Subir / bajar |
 | Clic izquierdo | Disparar el arpón |
+| V | Activar o guardar el vehículo (si está comprado) |
+| R | Barrido manual del sonar comprado (espera mínima: 3 s) |
+| F | Encender / apagar la linterna comprada |
 | E (junto a la estación) | Terminar el día y entregar |
 | Esc | Soltar el ratón |
 
@@ -29,7 +32,7 @@ Juego incremental **activo** en 3D y primera persona: eres un buzo que pesca con
 
 ### Mundo
 
-Un cañón con acantilados que baja en 6 terrazas hacia -Z (hacia delante, más allá de la estación). Cada zona es 20 m más honda que la anterior, con su decorado, sus peces y 5 materiales de mejora.
+Un cañón con acantilados que baja en 6 terrazas hacia -Z (hacia delante, más allá de la estación). Cada zona es 20 m más honda que la anterior, con su decorado, sus peces y cinco materiales recogibles para mejoras y recetas.
 
 | Zona | Fondo | Decorado | Peces (valor) | Material |
 |---|---|---|---|---|
@@ -38,7 +41,7 @@ Un cañón con acantilados que baja en 6 terrazas hacia -Z (hacia delante, más 
 | 3 · Roquedal | 58 m | Rocas, ostras gigantes | Pez globo 16, Barracuda 24 | Perla negra |
 | 4 · Jardín luminoso | 78 m | Gusanos tubícolas, anémonas | Pez linterna 50, Morena 70 | Cristal |
 | 5 · Fumarolas | 98 m | Chimeneas volcánicas | Rape abisal 150, Calamar vampiro 200 | Azufre |
-| 6 · Fosa | 118 m | Agujas de cristal | Pez dragón 350, Celacanto 900 | — |
+| 6 · Fosa | 118 m | Agujas de cristal | Pez dragón 350, Celacanto 900 | Fragmento abisal |
 
 Además hay dos peces con powerup instantáneo en cualquier zona (5 de cada uno): **Pez burbuja** (aire infinito 8 s) y **Pez rayo** (velocidad x1,8 durante 8 s). No se venden.
 
@@ -57,6 +60,9 @@ Además hay dos peces con powerup instantáneo en cualquier zona (5 de cada uno)
 | Aletas | +1 m/s | 15 · 1,7^nivel |
 | Sedal | +4 m de alcance | 12 · 1,6^nivel |
 | Carrete | +25 % velocidad de disparo y recogida | 20 · 1,7^nivel |
+| Aletas / vehículo | +1 m/s por nivel / scooter o minisubmarino con batería | Costes en la terminal |
+| Linterna / sonar / red | Luz, marcas periódicas de peces, fuerza de arpón | Costes y receta material en la terminal |
+| Estabilizador abisal | +0,2 atm por nivel | Coste y fragmento abisal en la terminal |
 | Traje de presión | +0,4 atm de soporte | Base por tramo (30, 150, 450, 1300, 4000) · 1,3^(nivel dentro del tramo) **más 1 material** de la zona del tramo |
 
 Los materiales se recogen tocándolos, no reaparecen y se conservan aunque acabe el día.
@@ -74,8 +80,14 @@ Marco de casco de buzo siempre visible (el color del aro cambia con el tramo del
 | `world.gd` | Terreno en terrazas (`floor_y`), decorado por zona y materiales recogibles |
 | `player.gd` | Cámara en primera persona, nado con inercia, límites del cañón y del fondo |
 | `harpoon.gd` | Lanza con sedal (estados HELD / OUT / BACK) y fusil en mano |
-| `fish.gd` | Pez: aparece en su zona, deambula y se mantiene dentro de ella |
+| `fish.gd` | Pez: comportamientos, resistencia, peso y calidad de captura |
 | `station.gd` | Estación flotante hecha con primitivas |
+| `sfx.gd` | Efectos, música y ambientes sintetizados (superficie y bajo el agua) |
+| `juice.gd` | Partículas, burbujas y rayos de luz |
+| `sonar.gd` | Clasificación por valor y seguimiento temporal de objetivos por zona |
+| `hazards.gd` | Medusas, corrientes y señales visuales de peligro |
+| `terminal.gd` | Mejoras agrupadas, requisitos y consulta de récords |
+| `tests_milestone.gd` | Comprobaciones de integración de pesca, sonar, peligros y terminal |
 | `depth_gauge.gd` | Dibujo del indicador de zonas |
 | `fish.gdshader` | Ondulación de nado, facetado low-poly, color y brillo por instancia |
 | `water.gdshader` | Superficie del agua vista por arriba y por abajo |
@@ -86,10 +98,10 @@ Para equilibrar, casi todo está en constantes al principio de `main.gd` (`SPECI
 
 ## Limitaciones y atajos conocidos
 
-- **Sin colisiones físicas**: solo hay una altura mínima sobre el terreno y los límites del cañón. Se atraviesan el decorado y la estación. Los impactos del arpón son por distancia, sin motor de física.
-- **Sin guardado**: todo el progreso se pierde al cerrar.
-- **Sin sonido ni música.**
-- **Teclas fijas** (no usan el InputMap de Godot) y sin menú de opciones ni pausa.
+- El jugador usa colisiones físicas. Los impactos con peces usan segmentos y distancia; las paredes interceptan el arpón con un rayo físico.
+- El guardado conserva progreso y récords; una inmersión a medias se reinicia al cargar.
+- **Sin grabaciones de audio**: efectos, música y ambientes se sintetizan por código.
+- Controles reasignables desde las opciones, incluidos sonar, linterna y vehículo.
 - **Equilibrio sin probar**: duración del día, precios y costes son primeras estimaciones.
 - **HUD pensado para ventanas de unos 1150 px de ancho o más**; en más estrecho el panel inferior puede cortarse.
 - El primer movimiento del ratón al arrancar puede girar la cámara de golpe.
@@ -107,7 +119,7 @@ Para equilibrar, casi todo está en constantes al principio de `main.gd` (`SPECI
 - **Tutorial ligero** el primer día: hacia dónde bajar, qué es la presión, para qué sirven las perlas.
 - **Git** para poder experimentar sin miedo.
 
-### 2. Tacto y "juice"
+### 2. Tacto y "juice" (hecho)
 
 - Retroceso y sacudida leve al disparar; tensión visible en el sedal; el pez forcejea al ser arrastrado.
 - Partículas en suspensión, burbujas del buzo, cáusticas en la zona 1 y rayos de luz desde la superficie.
@@ -115,25 +127,33 @@ Para equilibrar, casi todo está en constantes al principio de `main.gd` (`SPECI
 - Efectos de casco: vaho, gotas al salir del agua, grietas o viñeta roja con presión extrema.
 - Cardúmenes: peces comunes en grupo que huyen juntos al fallar un disparo.
 
-### 3. Profundidad de la pesca
+### 3. Profundidad de la pesca (hecho)
 
-- **Comportamientos por especie**: unos huyen, otros atacan o embisten, otros se esconden en el decorado, otros solo salen con poca luz.
-- **Peces con resistencia**: los grandes necesitan varios arponazos o un minijuego de recogida con el carrete.
-- **Tamaños y calidad**: cada captura con peso variable y precio en consecuencia; récords por especie.
-- **Capacidad de la bolsa** como límite y mejora, para decidir qué merece la pena cargar.
-- **Peligros**: medusas que quitan oxígeno, corrientes, depredadores en las zonas profundas.
-- **Variantes raras** (doradas, albinas) de cada especie con valor multiplicado.
+- Comportamientos: huida, embestida anunciada por brillo, refugios con ventanas de reaparición y peces que evitan la linterna (pez linterna y calamar vampiro).
+- Resistencia: un disparo causa un solo impacto; el arpón regresa tras golpear. La red aplica dos puntos. Las paredes interceptan el disparo.
+- Tamaño visible, peso y precio variables. Récords por especie de peso, mejor venta y cantidad, guardados y visibles en la pestaña Récords; se conservan al renacer.
+- Capacidad de bolsa mejorable, hasta 55 capturas (implementada en el milestone 4).
+- Peligros: medusas (-4 s de oxígeno), depredadores (-5 s) y corrientes laterales delimitadas por partículas. Protección de 2 s entre golpes; se pueden esquivar.
+- Las variantes raras doradas y albinas están implementadas con probabilidad baja, apariencia propia y precio multiplicado.
 
-### 4. Progresión y economía
+Sonar renovado: clasifica por precio de venta real, incluyendo variante y mercado. Cada barrido muestra la mejor captura de las seis zonas y sigue de 1 a 3 objetivos en la zona actual según el nivel. Las marcas caducan y se invalidan al capturar/reaparecer el pez. Barridos automáticos cada 12/9/6 s y manuales con R.
 
-- **Vehículo** (ya previsto): scooter submarino y después minisubmarino, con batería propia, para acortar el viaje a las zonas lejanas.
-- **Más ramas de mejora**: linterna, sonar que marca peces o materiales, arpón múltiple o con red, traje con propulsión.
-- **Árbol de habilidades** en lugar de lista plana, con elecciones excluyentes para que dos partidas sean distintas.
-- **Estación ampliable**: acuario, laboratorio, almacén, cada módulo con su mejora pasiva.
-- **Mercado con precios variables** por día y **encargos** ("trae 3 barracudas") con recompensa extra.
-- **Materiales con más usos**: que cada zona tenga recetas además de subir el traje.
-- **Prestige**: reiniciar con un multiplicador permanente, o una segunda fosa más profunda al completar la primera.
-- **Automatización que no quite el juego activo**: trampas o redes que pescan comunes mientras tú vas a por los raros.
+Terminal: pestañas Buceo, Pesca, Vehículos, Estación, Especialidad, Récords y Prestigio. Cada mejora muestra nivel, efecto, precio, receta y motivo de bloqueo. El botón de empezar el día permanece visible.
+
+Validación: ejecutar Godot con `--headless --path . --script tests.gd` y `--headless --path . --script tests_milestone.gd -- smoke`. El segundo usa un guardado temporal independiente; comprueba sonar, resistencia, peligros, bolsa, récords y terminal. Para captura visual, ejecutar sin headless con `--rendering-method gl_compatibility --script tests_milestone.gd -- smoke --capture`.
+
+### 4. Progresión y economía (hecho)
+
+- Bolsa de captura con capacidad inicial de 5 peces y mejoras de +5 por nivel (hasta 55); la bolsa llena impide guardar capturas nuevas.
+- El mercado asigna un precio diario aleatorio a cada especie y el recuento muestra el total realmente pagado.
+- Encargo diario de una especie con recompensa adicional por completar el objetivo.
+- Scooter submarino y minisubmarino desbloqueable, ambos con batería que se recarga al volver a la superficie.
+- Ramas de linterna, sonar, arpón de red y estabilizador abisal; el sonar marca peces cercanos y la red refuerza cada impacto.
+- Elección excluyente entre Cazador (mayor precio de venta) y Explorador (más oxígeno y batería).
+- Almacén, acuario, laboratorio y trampas amplían visualmente la estación y aportan capacidad, bonificaciones de venta, calidad y capturas pasivas.
+- Las recetas iniciales de los módulos consumen materiales de las seis zonas; sus niveles posteriores cuestan monedas. El fragmento abisal se recoge en la fosa.
+- Prestigio disponible al completar el traje y reunir 100 000 monedas: reinicia la progresión y materiales, y da +25 % permanente al valor de venta por renacimiento.
+- Las trampas aportan hasta dos peces comunes por día y respetan la capacidad de la bolsa.
 
 ### 5. Mundo y contenido
 

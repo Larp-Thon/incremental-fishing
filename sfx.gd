@@ -23,13 +23,22 @@ func _ready() -> void:
 	add("breath", 0.9, func(t: float) -> float: return noise() * pow(sin(PI * t / 0.9), 2.0) * 0.5)
 	add("pad", 3.0, func(t: float) -> float: return (sin(TAU * 220.0 * t) + sin(TAU * 440.0 * t) * 0.3) * pow(sin(PI * t / 3.0), 2.0) * 0.1)
 	# Ambiente en bucle de 4 s: las frecuencias dan ciclos enteros para que no haga clic al repetirse.
-	add("ambient", 4.0, func(t: float) -> float: return (sin(TAU * 55.0 * t) * 0.25 + sin(TAU * 82.5 * t) * 0.15) * (0.7 + 0.3 * sin(TAU * 0.25 * t)) + noise() * 0.2 * pow(sin(PI * t / 4.0), 2.0), true)
-	players.ambient.play()
+	add("waves", 4.0, func(t: float) -> float: return (noise() * 0.12 + sin(TAU * 48.0 * t) * 0.05 + sin(TAU * 72.0 * t) * 0.035) * (0.25 + 0.75 * pow(sin(PI * (t + 0.35) / 4.0), 2.0)), true)
+	add("underwater", 4.0, func(t: float) -> float: return (sin(TAU * 62.0 * t) * 0.11 + sin(TAU * 93.0 * t) * 0.07 + noise() * 0.07) * (0.55 + 0.45 * sin(PI * t / 4.0)), true)
+	players.waves.play()
+	players.underwater.play()
 
 
 func noise() -> float:
 	lp = lerpf(lp, randf_range(-1.0, 1.0), 0.08)
 	return lp * 4.0
+
+
+func _exit_tree() -> void:
+	for player in players.values():
+		player.stop()
+		player.stream = null
+	players.clear()
 
 
 func add(sound: String, seconds: float, wave: Callable, loop := false) -> void:
@@ -48,6 +57,8 @@ func add(sound: String, seconds: float, wave: Callable, loop := false) -> void:
 	var p := AudioStreamPlayer.new()
 	p.stream = w
 	p.max_polyphony = 4
+	if sound == "waves" or sound == "underwater":
+		p.volume_db = -60.0
 	add_child(p)
 	players[sound] = p
 
@@ -57,10 +68,13 @@ func play(sound: String, pitch := 1.0) -> void:
 	players[sound].play()
 
 
-# El zumbido de fondo baja de tono con la profundidad y se apaga fuera del agua.
+# Cada ambiente queda limitado a su lado de la superficie; los cambios de volumen son suaves.
 func ambient(deep: float, under: bool) -> void:
-	players.ambient.pitch_scale = lerpf(1.0, 0.6, deep)
-	players.ambient.volume_db = 0.0 if under else -14.0
+	players.waves.volume_db = -5.0 if not under else -60.0
+	players.waves.stream_paused = under
+	players.underwater.pitch_scale = lerpf(1.0, 0.72, deep)
+	players.underwater.volume_db = -8.0 if under else -60.0
+	players.underwater.stream_paused = not under
 
 
 func _process(delta: float) -> void:

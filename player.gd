@@ -30,6 +30,8 @@ func _process(delta: float) -> void:
 		wish.y += Input.get_axis("down", "up")
 	# El lerp da la inercia del agua: tardas en arrancar y en frenar.
 	velocity = velocity.lerp(wish.limit_length(1.0) * main.swim_speed(), 3.0 * delta)
+	if not locked and main.hazards:
+		velocity += main.hazards.current_force * delta * 3.0
 	move_and_slide()
 	# Red de seguridad además de la colisión: límites del cañón y altura mínima sobre el fondo.
 	position.x = clampf(position.x, -63.0, 63.0)
