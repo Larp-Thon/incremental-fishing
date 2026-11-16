@@ -98,7 +98,7 @@ Para equilibrar, casi todo está en constantes al principio de `main.gd` (`SPECI
 
 ## Lista de mejoras
 
-### 1. Base imprescindible
+### 1. Base imprescindible (ya hecho)
 
 - **Guardado y carga** (monedas, niveles, materiales, día), con autoguardado al terminar el día.
 - **Colisiones reales**: pasar el jugador a `CharacterBody3D` y dar colisión al terreno, al decorado y a la estación.

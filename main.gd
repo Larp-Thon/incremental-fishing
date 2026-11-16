@@ -39,8 +39,8 @@ const RARITY := {
 # zone: zona (0-5) donde vive, cerca del fondo; -1 = cualquiera. big: escala. count: cuántos hay.
 # power: efecto instantáneo al pescarlo (no se vende).
 const SPECIES := [
-	{name = "Anchoa", rarity = "Común", value = 1, zone = 0, color = Color(0.6, 0.78, 0.75), big = 0.45, glow = 0.0, count = 24},
-	{name = "Sardina", rarity = "Común", value = 1, zone = 0, color = Color(0.75, 0.8, 0.85), big = 0.6, glow = 0.0, count = 26},
+	{name = "Anchoa", rarity = "Común", value = 1, zone = 0, color = Color(0.6, 0.78, 0.75), big = 0.45, glow = 0.0, count = 24, school = true},
+	{name = "Sardina", rarity = "Común", value = 1, zone = 0, color = Color(0.75, 0.8, 0.85), big = 0.6, glow = 0.0, count = 26, school = true},
 	{name = "Jurel", rarity = "Común", value = 2, zone = 0, color = Color(0.4, 0.6, 0.5), big = 0.8, glow = 0.0, count = 16},
 	{name = "Dorada", rarity = "Común", value = 5, zone = 1, color = Color(0.95, 0.8, 0.3), big = 0.9, glow = 0.0, count = 20},
 	{name = "Pez loro", rarity = "Poco común", value = 8, zone = 1, color = Color(0.2, 0.8, 0.7), big = 1.0, glow = 0.0, count = 16},
@@ -327,15 +327,28 @@ func _ready() -> void:
 		menu.boot()
 
 
+# Los peces a menos de "radius" metros huyen del buzo unos segundos.
+func scare(from: Vector3, radius: float) -> void:
+	for f in get_tree().get_nodes_in_group("fish"):
+		if f.position.distance_to(from) < radius:
+			f.fear = randf_range(2.0, 3.5)
+
+
 func spawn_fish() -> void:
 	for f in get_tree().get_nodes_in_group("fish"):
 		f.free()
 	for id in SPECIES.size():
+		var leader: Node3D = null
 		for i in SPECIES[id].count:
 			var f: MeshInstance3D = FISH.new()
 			f.mesh = fish_mesh
 			f.species_id = id
 			f.species = SPECIES[id]
+			if SPECIES[id].get("school", false):  # cardúmenes de 6: el primero guía y el resto le sigue
+				if i % 6 == 0:
+					leader = f
+				else:
+					f.leader = leader
 			add_child(f)
 
 

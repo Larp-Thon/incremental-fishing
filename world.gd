@@ -85,8 +85,8 @@ func build_terrain() -> void:
 				st.set_color(color.lerp(CLIFF, wall(p.x, p.y)))
 				st.add_vertex(Vector3(p.x, floor_y(p.x, p.y), p.y))
 	st.generate_normals()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://terrain.gdshader")
 	var terrain := MeshInstance3D.new()
 	terrain.mesh = st.commit()
 	terrain.material_override = mat

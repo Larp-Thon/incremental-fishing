@@ -5,6 +5,8 @@ const MAX_Y := 1.2  # cuánto puedes asomarte fuera del agua
 
 var locked := false  # la terminal abierta bloquea el control
 var sens := 0.003
+var kick := 0.0  # retroceso del disparo (1 = recién disparado)
+var shake := 0.0  # sacudida de la cámara
 
 @onready var main := get_parent()
 @onready var cam: Camera3D = $Camera
@@ -33,3 +35,8 @@ func _process(delta: float) -> void:
 	position.x = clampf(position.x, -63.0, 63.0)
 	position.z = clampf(position.z, -253.0, 53.0)
 	position.y = clampf(position.y, main.world.floor_y(position.x, position.z) + 0.7, MAX_Y)
+	# Retroceso y sacudida: solo se mueve la cámara, no el cuerpo.
+	kick = lerpf(kick, 0.0, 9.0 * delta)
+	shake = lerpf(shake, 0.0, 8.0 * delta)
+	cam.rotation.x = kick * 0.04
+	cam.position = Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * shake * 0.03
