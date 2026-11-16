@@ -8,6 +8,11 @@
 [ext_resource type="Shader" path="res://helmet.gdshader" id="6"]
 [ext_resource type="Script" path="res://depth_gauge.gd" id="7"]
 [ext_resource type="Script" path="res://world.gd" id="8"]
+[ext_resource type="Script" path="res://sfx.gd" id="9"]
+[ext_resource type="Script" path="res://menu.gd" id="10"]
+
+[sub_resource type="SphereShape3D" id="player_shape"]
+radius = 0.4
 
 [sub_resource type="ProceduralSkyMaterial" id="skymat"]
 sky_top_color = Color(0.25, 0.5, 0.85, 1)
@@ -78,10 +83,19 @@ mesh = SubResource("surface")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10)
 script = ExtResource("3")
 
-[node name="Player" type="Camera3D" parent="."]
+[node name="Sfx" type="Node" parent="."]
+script = ExtResource("9")
+
+[node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
-current = true
+motion_mode = 1
 script = ExtResource("2")
+
+[node name="Camera" type="Camera3D" parent="Player"]
+current = true
+
+[node name="Shape" type="CollisionShape3D" parent="Player"]
+shape = SubResource("player_shape")
 
 [node name="Harpoon" type="Node3D" parent="."]
 script = ExtResource("4")
@@ -222,8 +236,28 @@ offset_bottom = -130.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_font_sizes/font_size = 22
-text = "[E] Terminar el día y entregar los peces"
 horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="HUD"]
+custom_minimum_size = Vector2(720, 0)
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_top = -250.0
+offset_right = 360.0
+offset_bottom = -175.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.85, 0.95, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 19
+horizontal_alignment = 1
+vertical_alignment = 2
+autowrap_mode = 3
 
 [node name="Mats" type="Label" parent="HUD"]
 anchors_preset = 2
@@ -311,3 +345,16 @@ theme_override_constants/separation = 6
 layout_mode = 2
 focus_mode = 0
 theme_override_font_sizes/font_size = 20
+
+[node name="Menu" type="PanelContainer" parent="HUD"]
+process_mode = 3
+visible = false
+custom_minimum_size = Vector2(540, 0)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("10")

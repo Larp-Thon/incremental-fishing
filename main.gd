@@ -17,6 +17,8 @@ const BASE_SUPPORT := 3.0  # atm que aguanta el traje inicial (20 m: toda la zon
 const SUIT_STEP := 0.4  # atm de soporte por nivel de traje: 5 niveles = una zona más
 const CRUSH_OVER := 2.0  # atm por encima del soporte a partir de las que salta el aviso grande
 const SUIT_BASE_COST := [30, 150, 450, 1300, 4000]  # coste base de cada tramo de 5 niveles
+# Teclas por defecto; se registran en el InputMap al arrancar y se cambian desde el menú.
+const KEYS := {forward = KEY_W, back = KEY_S, left = KEY_A, right = KEY_D, up = KEY_SPACE, down = KEY_CTRL, use = KEY_E}
 
 const CYAN := Color(0.35, 0.85, 1.0)
 const GREEN := Color(0.4, 0.9, 0.5)
@@ -73,8 +75,20 @@ var speed_time := 0.0  # powerup: segundos restantes de velocidad extra
 var buttons := {}
 var fish_mesh := SphereMesh.new()
 var toast_tween: Tween
+var hint_tween: Tween
+var settings := {sens = 0.003, volume = 0.8, binds = {}}
+var found := [0, 0, 0, 0, 0]  # materiales ya recogidos del mundo, por zona (no reaparecen)
+var hints := []  # consejos del tutorial que ya salieron
+var breath := 0.0  # segundos hasta la siguiente respiración
+# Con argumentos de arranque (capturas automáticas) se usa otro archivo y no se carga salvo con "load".
+var automated := not OS.get_cmdline_user_args().is_empty()
+var save_path := "user://save_auto.json" if automated else "user://save.json"
 
-@onready var player: Camera3D = $Player
+@onready var player: CharacterBody3D = $Player
+@onready var cam: Camera3D = $Player/Camera
+@onready var sfx: Node = $Sfx
+@onready var menu: Control = $HUD/Menu
+@onready var hint_label: Label = $HUD/Hint
 @onready var harpoon: Node3D = $Harpoon
 @onready var station: Node3D = $Station
 @onready var world: Node3D = $World
@@ -168,8 +182,111 @@ func near_station() -> bool:
 	return Vector2(d.x, d.z).length() < 6.0 and d.y > -3.0
 
 
+# Antes del _ready de los hijos: el mundo necesita saber qué materiales ya se recogieron.
+func _enter_tree() -> void:
+	load_game()
+	for action in KEYS:
+		bind(action, int(settings.binds.get(action, KEYS[action])))
+
+
+func bind(action: String, code: int) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	InputMap.action_erase_events(action)
+	var e := InputEventKey.new()
+	e.physical_keycode = code as Key
+	InputMap.action_add_event(action, e)
+	settings.binds[action] = code
+
+
+func key_name(action: String) -> String:
+	return OS.get_keycode_string(settings.binds[action])  # nombre según la posición en teclado QWERTY
+
+
+func apply_settings() -> void:
+	player.sens = settings.sens
+	AudioServer.set_bus_volume_db(0, linear_to_db(settings.volume))
+
+
+func game_state() -> Dictionary:
+	var levels := {}
+	for id in upgrades:
+		levels[id] = lvl(id)
+	# Un día a medias no cuenta: al cargar se repite.
+	return {coins = coins, day = day - int(playing), levels = levels, mats = mats, found = found, hints = hints}
+
+
+func save_game(game = null) -> void:
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify({settings = settings, game = game if game != null else game_state()}))
+
+
+# Copia una lista guardada si tiene el tamaño esperado (JSON devuelve floats).
+func ints(saved, into: Array) -> void:
+	if saved is Array and saved.size() == into.size():
+		for i in into.size():
+			into[i] = int(saved[i])
+
+
+func load_game() -> void:
+	if not FileAccess.file_exists(save_path) or (automated and not "load" in OS.get_cmdline_user_args()):
+		return
+	var d = JSON.parse_string(FileAccess.get_file_as_string(save_path))
+	if not d is Dictionary:
+		return
+	var s = d.get("settings")
+	if s is Dictionary:
+		settings.sens = clampf(float(s.get("sens", 0.003)), 0.0005, 0.01)
+		settings.volume = clampf(float(s.get("volume", 0.8)), 0.0, 1.0)
+		if s.get("binds") is Dictionary:
+			settings.binds = s.binds
+	var g = d.get("game")
+	if not g is Dictionary:
+		return
+	coins = int(g.get("coins", 0))
+	day = int(g.get("day", 0))
+	var levels = g.get("levels")
+	if levels is Dictionary:
+		for id in upgrades:
+			upgrades[id].level = clampi(int(levels.get(id, 0)), 0, upgrades[id].get("max", 999))
+	ints(g.get("mats"), mats)
+	ints(g.get("found"), found)
+	if g.get("hints") is Array:
+		hints = g.hints
+
+
+# Nueva partida: guarda solo "keep" como progreso y recarga la escena.
+func restart(keep: Dictionary) -> void:
+	save_game(keep)
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+
+# Consejo del tutorial: cada uno sale una sola vez por partida.
+func hint(key: String, text: String) -> void:
+	if key in hints:
+		return
+	hints.append(key)
+	hint_label.text = text
+	hint_label.modulate.a = 1.0
+	if hint_tween:
+		hint_tween.kill()
+	hint_tween = create_tween()
+	hint_tween.tween_interval(8.0)
+	hint_tween.tween_property(hint_label, "modulate:a", 0.0, 1.0)
+
+
 func _ready() -> void:
 	assert(oxygen_drain(ZONE) == 1.0 and is_equal_approx(oxygen_drain(ZONE * 2.0), 5.0))
+
+	# El HUD está maquetado a 1152x648 y se escala con la ventana.
+	var window := get_window()
+	window.content_scale_size = Vector2i(1152, 648)
+	window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	window.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	apply_settings()
+	hint_label.modulate.a = 0.0
 
 	fish_mesh.radial_segments = 8
 	fish_mesh.rings = 4
@@ -204,6 +321,10 @@ func _ready() -> void:
 			end_day()
 		elif a == "shop":
 			show_upgrades()
+		elif a == "menu":
+			menu.open()
+	if not automated:
+		menu.boot()
 
 
 func spawn_fish() -> void:
@@ -236,6 +357,7 @@ func start_day() -> void:
 	helmet.material.set_shader_parameter("rim_color", SUIT_COLORS[lvl("suit") / 5])
 	playing = true
 	show_toast("Día %d" % day, Color.WHITE)
+	hint("start", "Nada hacia delante y baja por el cañón: cuanto más hondo, más valen los peces.\nClic para disparar el arpón. El día dura lo que dure tu oxígeno.")
 
 
 func end_day() -> void:
@@ -270,6 +392,8 @@ func end_day() -> void:
 	upgrades_page.hide()
 	summary_page.show()
 	shop.show()
+	hint_label.modulate.a = 0.0
+	save_game()
 
 
 func show_upgrades() -> void:
@@ -284,7 +408,9 @@ func buy(id: String) -> void:
 		if id == "suit":
 			mats[suit_tier()] -= 1
 		upgrades[id].level += 1
+		sfx.play("coin")
 		refresh_shop()
+		save_game()
 
 
 func refresh_shop() -> void:
@@ -326,6 +452,7 @@ func catch_fish(fish: Node) -> void:
 			bag[fish.species_id] = bag.get(fish.species_id, 0) + 1
 			show_toast("%s\n%s  ·  %d monedas" % [s.name, s.rarity, s.value], RARITY[s.rarity])
 			refresh_bag()
+	sfx.play("catch")
 	fish.respawn()
 
 
@@ -341,8 +468,7 @@ func refresh_bag() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if playing and near_station() and event is InputEventKey and event.pressed \
-			and not event.echo and event.physical_keycode == KEY_E:
+	if playing and near_station() and event.is_action_pressed("use"):
 		end_day()
 
 
@@ -358,15 +484,28 @@ func _process(delta: float) -> void:
 			oxygen -= delta * drain
 			if oxygen <= 0.0:
 				end_day()
+		# Respiración: se acelera con poco oxígeno.
+		breath -= delta
+		if y < 0.0 and breath <= 0.0:
+			breath = 1.1 if oxygen < LOW_OXYGEN else 3.5
+			sfx.play("breath", randf_range(0.9, 1.1))
+		if over > 0.0:
+			hint("pressure", "Tu traje no aguanta esta presión: aquí el oxígeno se gasta más rápido.\nMejora el traje de presión para bajar más.")
+		if oxygen < LOW_OXYGEN:
+			hint("oxygen", "Queda poco oxígeno. Cuando se acabe termina el día y se vende lo pescado.\nTambién puedes entregar antes en la estación.")
 		# Materiales del traje: se recogen al tocarlos y no reaparecen.
 		for p in world.pickups:
 			if p.position.distance_to(player.position) < 2.5:
 				var zone: int = p.get_meta("zone")
 				mats[zone] += 1
+				found[zone] += 1
 				world.pickups.erase(p)
 				p.queue_free()
 				var m: Dictionary = world.MATERIALS[zone]
 				show_toast("%s\nMaterial para mejorar el traje  ·  tienes %d" % [m.name, mats[zone]], m.color)
+				hint("mat", "Los materiales se gastan en la tienda para mejorar el traje. No reaparecen.")
+				sfx.play("pickup")
+				save_game()
 				break
 
 	# Bajo el agua: color de fondo + niebla, y cada vez menos luz. Fuera: cielo y sin niebla.
@@ -400,6 +539,9 @@ func _process(delta: float) -> void:
 	gauge.safe_depth = (support() - 1.0) * 10.0
 	gauge.crush_depth = gauge.safe_depth + CRUSH_OVER * 10.0
 
+	sfx.ambient(t, under)
+	if playing and over >= CRUSH_OVER and blink and warning.modulate.a < 1.0:  # un pitido por parpadeo
+		sfx.play("alarm")
 	warning.visible = playing and over >= CRUSH_OVER
 	warning.modulate.a = 1.0 if blink else 0.45
 	status.visible = playing and over > 0.0 and over < CRUSH_OVER
@@ -416,8 +558,9 @@ func _process(delta: float) -> void:
 			mats_label.text += "%s x%d\n" % [world.MATERIALS[i].name, mats[i]]
 
 	prompt.visible = playing and near_station()
+	prompt.text = "[%s] Terminar el día y entregar los peces" % key_name("use")
 	var target := station.position + Vector3.UP
-	marker.visible = playing and not near_station() and not player.is_position_behind(target)
+	marker.visible = playing and not near_station() and not cam.is_position_behind(target)
 	if marker.visible:
-		marker.position = player.unproject_position(target)
+		marker.position = cam.unproject_position(target)
 		marker.text = "◆ Estación %dm" % player.position.distance_to(target)

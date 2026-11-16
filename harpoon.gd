@@ -2,6 +2,7 @@ extends Node3D
 # Este nodo es la lanza: vuela en el mundo y vuelve recogida por el sedal.
 # El fusil se queda en la mano (hijo de la cámara). Origen de la lanza = cola, punta hacia -Z.
 # shortcut: impacto por distancia contra el grupo "fish" (sin física); cambiar a Area3D si hay cientos de peces.
+# El terreno y el decorado sólido sí paran la lanza (rayo contra la física).
 
 enum { HELD, OUT, BACK }
 const HAND := Vector3(0.3, -0.26, -0.8)  # posición del fusil respecto a la cámara
@@ -14,7 +15,7 @@ var hooked: Node3D
 var rope := MeshInstance3D.new()
 
 @onready var main := get_parent()
-@onready var player: Camera3D = $"../Player"
+@onready var player: CharacterBody3D = $"../Player"
 
 
 func _ready() -> void:
@@ -76,6 +77,7 @@ func _process(delta: float) -> void:
 				state = OUT
 				dir = -player.global_basis.z
 				traveled = 0.0
+				main.sfx.play("shoot")
 		OUT:
 			var tip_from: Vector3 = global_transform * TIP
 			var step := 30.0 * reel * delta
@@ -89,7 +91,8 @@ func _process(delta: float) -> void:
 					hooked = fish
 					fish.hooked = true
 					break
-			if hooked or traveled >= main.reach():
+			var ray := PhysicsRayQueryParameters3D.create(tip_from, tip_to, 0xFFFFFFFF, [player.get_rid()])
+			if hooked or traveled >= main.reach() or get_world_3d().direct_space_state.intersect_ray(ray):
 				state = BACK
 		BACK:
 			global_position = global_position.move_toward(rest, 14.0 * reel * delta)

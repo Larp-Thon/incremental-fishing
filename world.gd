@@ -21,9 +21,13 @@ const MATERIALS := [
 var pickups: Array[MeshInstance3D] = []  # materiales aún sin recoger; meta "zone"
 var meshes := {}
 var mats := {}
+var body := StaticBody3D.new()  # colisión de todo el decorado sólido
+var skip := []  # materiales por zona ya recogidos en la partida guardada: no vuelven a aparecer
 
 
 func _ready() -> void:
+	skip = get_parent().found.duplicate()
+	add_child(body)
 	var ball := SphereMesh.new()
 	ball.radial_segments = 8
 	ball.rings = 4
@@ -87,6 +91,7 @@ func build_terrain() -> void:
 	terrain.mesh = st.commit()
 	terrain.material_override = mat
 	add_child(terrain)
+	terrain.create_trimesh_collision()
 
 
 # Punto al azar sobre el fondo de una zona (lejos de rampas y paredes).
@@ -96,12 +101,22 @@ func spot(zone: int) -> Vector3:
 	return Vector3(x, floor_y(x, z), z)
 
 
+# Como spot(), pero a más de "gap" metros de lo recogible: un bloque sólido no debe tapar un material.
+func clear_spot(zone: int, gap: float) -> Vector3:
+	var p := spot(zone)
+	for i in 30:
+		if pickups.all(func(k: Node3D) -> bool: return k.position.distance_to(p) > gap):
+			break
+		p = spot(zone)
+	return p
+
+
 func tilt(amount: float) -> Vector3:
 	return Vector3(randf_range(-amount, amount), randf() * TAU, randf_range(-amount, amount))
 
 
-# Coloca una pieza apoyada en "base". size está en metros.
-func prop(kind: String, base: Vector3, size: Vector3, color := Color.WHITE, glow := 0.0, rot := Vector3.ZERO) -> MeshInstance3D:
+# Coloca una pieza apoyada en "base". size está en metros. solid: bloquea al buzo y al arpón.
+func prop(kind: String, base: Vector3, size: Vector3, color := Color.WHITE, glow := 0.0, rot := Vector3.ZERO, solid := false) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	m.mesh = meshes[kind]
 	if kind != "kelp":
@@ -119,10 +134,27 @@ func prop(kind: String, base: Vector3, size: Vector3, color := Color.WHITE, glow
 	m.rotation = rot
 	m.scale = size
 	add_child(m)
+	if solid:
+		var c := CollisionShape3D.new()
+		if kind == "box":
+			var box := BoxShape3D.new()
+			box.size = size
+			c.shape = box
+		else:  # cilindro aproximado; el cono se estrecha, así que cuenta menos radio
+			var cyl := CylinderShape3D.new()
+			cyl.height = size.y
+			cyl.radius = (size.x + size.z) * (0.15 if kind == "cone" else 0.25)
+			c.shape = cyl
+		c.position = m.position
+		c.rotation = rot
+		body.add_child(c)
 	return m
 
 
 func pickup(zone: int, pos: Vector3) -> void:
+	if skip[zone] > 0:
+		skip[zone] -= 1
+		return
 	var m := prop("ball", pos, Vector3.ONE * 0.45, MATERIALS[zone].color, 2.5)
 	m.set_meta("zone", zone)
 	pickups.append(m)
@@ -160,10 +192,10 @@ func decorate() -> void:
 			pickup(1, p + Vector3.UP * 1.3)
 
 	# Zona 3 · Roquedal: bloques de roca y ostras gigantes (5 con perla negra).
-	for i in 55:
-		prop("box", spot(2), Vector3(randf_range(2.0, 6.0), randf_range(2.0, 10.0), randf_range(2.0, 6.0)), Color(0.36, 0.38, 0.42), 0.0, tilt(0.35))
 	for i in 14:
 		shell(2, i < 5, 2.2, Color(0.45, 0.45, 0.5))
+	for i in 55:
+		prop("box", clear_spot(2, 7.0), Vector3(randf_range(2.0, 6.0), randf_range(2.0, 10.0), randf_range(2.0, 6.0)), Color(0.36, 0.38, 0.42), 0.0, tilt(0.35), true)
 
 	# Zona 4 · Jardín luminoso: gusanos tubícolas y anémonas (5 con cristal).
 	for i in 50:
@@ -183,16 +215,16 @@ func decorate() -> void:
 			pickup(3, p + Vector3.UP * 2.0)
 
 	# Zona 5 · Fumarolas: chimeneas volcánicas y 5 depósitos de azufre.
-	for i in 40:
-		var p := spot(4)
-		var h := randf_range(3.0, 9.0)
-		prop("cone", p, Vector3(randf_range(2.0, 4.0), h, randf_range(2.0, 4.0)), Color(0.12, 0.11, 0.12))
-		prop("ball", p + Vector3.UP * (h - 0.7), Vector3.ONE * 0.7, Color(1.0, 0.45, 0.1), 3.0)
 	for i in 5:
 		var p := spot(4)
 		prop("box", p, Vector3(1.6, 0.8, 1.6), Color(0.25, 0.22, 0.12), 0.0, tilt(0.3))
 		pickup(4, p + Vector3.UP * 1.2)
+	for i in 40:
+		var p := clear_spot(4, 4.0)
+		var h := randf_range(3.0, 9.0)
+		prop("cone", p, Vector3(randf_range(2.0, 4.0), h, randf_range(2.0, 4.0)), Color(0.12, 0.11, 0.12), 0.0, Vector3.ZERO, true)
+		prop("ball", p + Vector3.UP * (h - 0.7), Vector3.ONE * 0.7, Color(1.0, 0.45, 0.1), 3.0)
 
 	# Zona 6 · Fosa: agujas de cristal.
 	for i in 50:
-		prop("cone", spot(5), Vector3(randf_range(1.0, 2.5), randf_range(4.0, 14.0), randf_range(1.0, 2.5)), Color(0.5, 0.35, 0.9), 0.7, tilt(0.3))
+		prop("cone", clear_spot(5, 4.0), Vector3(randf_range(1.0, 2.5), randf_range(4.0, 14.0), randf_range(1.0, 2.5)), Color(0.5, 0.35, 0.9), 0.7, tilt(0.3), true)

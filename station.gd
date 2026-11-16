@@ -2,8 +2,11 @@ extends Node3D
 # Estación flotante: punto de entrega y terminal de mejoras.
 # La cadena luminosa baja hasta el fondo para encontrarla desde abajo.
 
+var body := StaticBody3D.new()  # colisión de las piezas en forma de caja
+
 
 func _ready() -> void:
+	add_child(body)
 	var orange := Color(0.95, 0.45, 0.15)
 	part(BoxMesh.new(), Vector3(7, 0.3, 7), Vector3(0, 0.3, 0), Color(0.72, 0.55, 0.38))  # cubierta
 	for x in [-3.0, 3.0]:
@@ -30,3 +33,10 @@ func part(mesh: PrimitiveMesh, size: Vector3, pos: Vector3, color: Color, glow :
 	m.scale = size
 	m.position = pos
 	add_child(m)
+	if mesh is BoxMesh:
+		var shape := BoxShape3D.new()
+		shape.size = size
+		var c := CollisionShape3D.new()
+		c.shape = shape
+		c.position = pos
+		body.add_child(c)
