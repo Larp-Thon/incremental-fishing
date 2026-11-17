@@ -116,7 +116,7 @@ func habitat(s: Dictionary, known: bool) -> String:
 
 func refresh() -> void:
 	main.upgrades_title.text = "Terminal de buceo · %d monedas" % main.coins
-	main.start_button.text = "Iniciar día %d" % (main.day + 1)
+	main.start_button.text = "Volver al agua" if main.playing else "Iniciar día %d" % (main.day + 1)
 	materials.text = "Materiales: "
 	for i in main.mats.size():
 		materials.text += "%s %d   " % [main.world.MATERIALS[i].name, main.mats[i]]

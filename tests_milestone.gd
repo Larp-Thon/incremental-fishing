@@ -99,10 +99,73 @@ func run() -> void:
 	check(world.notes.size() == 8, "eight journal notes in the world")
 	main.collect_note(world.notes[0])
 	check(main.notes == [0] and world.notes.size() == 7, "collecting a note stores it")
-	main.start_day("night")
+	# --- Milestone 6: ciclo de día y noche ---
+	main.start_day()
+	main.player.position = Vector3(0, -10, -20)
+	main.oxygen = 0.01
+	main.store_catch(0, 5)
+	main._process(0.1)
+	check(main.playing and main.bag.is_empty() and main.player.position == main.START and main.oxygen == main.max_oxygen(), "running out of air faints: catch lost, day goes on")
+	main.oxygen = 1.0
+	main._process(0.1)
+	check(main.oxygen == 2.0, "oxygen refills at the surface")
+	check(not get_nodes_in_group("fish").any(func(f): return f.species.get("night", false)), "no nocturnal species by day")
+	main.clock = main.DAY_SECONDS
+	main._process(0.01)
+	check(main.night and main.hunter.visible, "nightfall releases the hunter")
 	check(get_nodes_in_group("fish").any(func(f): return f.species.get("night", false)), "night brings nocturnal species")
+	main.clock = main.DAY_SECONDS + main.DUSK
 	main._process(0.01)
 	check(is_equal_approx(main.env.fog_density, 0.04) and main.sun.light_energy < 0.5, "night dims the light")
+	main.player.position = Vector3(0, -10, -40)
+	main.hunter.position = main.player.position + Vector3(0, 0, -6)
+	check(main.hunter.harpooned(main.player.position, main.hunter.position) and main.hunter.stun > 0.0, "harpoon stuns the hunter")
+	main.hunter.position = main.player.position + Vector3(0, 0, -1)
+	main.hunter._process(0.01)
+	check(main.playing, "stunned hunter does not kill")
+	main.hunter.stun = 0.0
+	main.store_catch(0, 5)
+	main.hunter._process(0.01)
+	check(not main.playing and main.bag.is_empty(), "hunter kills the diver and the catch is lost")
+	main.start_day()
+	main.player.position = Vector3(0, -10, -40)
+	main.store_catch(0, 5)
+	main.clock = main.DAY_SECONDS + main.NIGHT_SECONDS
+	main.night = true
+	var coins_before: int = main.coins
+	main._process(0.01)
+	check(not main.playing and main.coins == coins_before, "night ends away from the station: nothing sold")
+	main.start_day()
+	main.player.position = main.station.position + Vector3(0, 0.5, 2)
+	main.store_catch(0, 5)
+	main.clock = main.DAY_SECONDS + main.NIGHT_SECONDS
+	main.night = true
+	coins_before = main.coins
+	main._process(0.01)
+	check(not main.playing and main.coins >= coins_before + 5, "night ends at the station: catch sold")
+	# --- Milestone 6: entrega obligatoria, terminal y recuento ---
+	main.start_day()
+	main.player.position = main.station.position + Vector3(0, 0.5, 5)
+	check(main.near_station(), "the delivery dock counts as the station")
+	main.store_catch(0, 7)
+	coins_before = main.coins
+	main.deliver()
+	check(main.bag.is_empty() and main.coins == coins_before + 7 + 5 * main.lvl("aquarium") and main.delivered[0] == 1, "delivering pays at once")
+	main.store_catch(12, 900)
+	main.die("test")
+	check(main.coins == coins_before + 7 + 5 * main.lvl("aquarium"), "death keeps what was delivered, loses the rest")
+	check(main.summary_list.text.contains("perdiste"), "recount explains the loss")
+	main.next_pressed()
+	check(main.summary_list.text.contains("Común") and main.summary_list.text.contains("Total del día"), "skipping finishes the recount by rarity")
+	main.start_day()
+	main.player.position = main.station.position + Vector3(0, 0.5, 5)
+	main.open_terminal()
+	var clock_before: float = main.clock
+	main._process(0.5)
+	check(main.shop.visible and main.upgrades_page.visible and main.clock == clock_before, "station terminal opens mid-day and pauses the clock")
+	check(main.start_button.text == "Volver al agua", "terminal returns to the water mid-day")
+	main.start_pressed()
+	check(main.playing and not main.shop.visible and not main.player.locked, "closing the terminal resumes the dive")
 	main.start_day("storm")
 	main._process(0.01)
 	check(is_equal_approx(main.env.fog_density, 0.07), "storm thickens the fog")

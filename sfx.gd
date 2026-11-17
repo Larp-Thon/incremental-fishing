@@ -21,6 +21,8 @@ func _ready() -> void:
 	add("deny", 0.3, func(t: float) -> float: return sin(TAU * 200.0 * t) * float(fmod(t, 0.15) < 0.1) * 0.3)
 	add("ping", 0.8, func(t: float) -> float: return sin(TAU * 1200.0 * t) * exp(-t * 5.0) * 0.3)
 	add("whale", 2.6, func(t: float) -> float: return sin(TAU * (120.0 - 14.0 * t) * t + 3.0 * sin(TAU * 4.0 * t)) * pow(sin(PI * t / 2.6), 2.0) * 0.35)
+	add("thud", 0.25, func(t: float) -> float: return sin(TAU * (95.0 - 120.0 * t) * t) * exp(-t * 16.0) * 0.6 + noise() * exp(-t * 40.0) * 0.25)
+	add("growl", 0.8, func(t: float) -> float: return (signf(sin(TAU * 55.0 * t)) * 0.5 + noise()) * pow(sin(PI * t / 0.8), 2.0) * 0.35)
 	add("breath", 0.9, func(t: float) -> float: return noise() * pow(sin(PI * t / 0.9), 2.0) * 0.5)
 	add("pad", 3.0, func(t: float) -> float: return (sin(TAU * 220.0 * t) + sin(TAU * 440.0 * t) * 0.3) * pow(sin(PI * t / 3.0), 2.0) * 0.1)
 	# Ambiente en bucle de 4 s: las frecuencias dan ciclos enteros para que no haga clic al repetirse.

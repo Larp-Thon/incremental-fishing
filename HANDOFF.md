@@ -20,15 +20,20 @@ Juego incremental **activo** en 3D y primera persona: eres un buzo que pesca con
 | Clic izquierdo | Usar la herramienta: disparar el arpón o abrir la pantalla del sonar |
 | V | Activar o guardar el vehículo (si está comprado); en marcha solo se usa su arpón montado |
 | F | Encender / apagar la linterna comprada |
-| E (junto a la estación) | Terminar el día y entregar |
+| E (junto a la estación) | Entregar la captura (se cobra al momento) |
+| Mantener E (1,2 s, junto a la estación) | Terminar el día |
+| T (junto a la estación) | Abrir / cerrar la terminal de mejoras (el reloj se para) |
+| Clic al cazador nocturno | Aturdirlo 4 s |
 | Esc | Soltar el ratón |
 
 ## Bucle de juego actual
 
-1. **Día**: empiezas en la superficie junto a la estación flotante. El oxígeno (30 s de base) es la duración del día y solo baja bajo el agua.
-2. **Pesca**: el arpón sale unido por un sedal, y no puedes volver a disparar hasta que se recoge. El pez clavado cuenta cuando llega a tu mano.
-3. **Fin del día**: al acabarse el oxígeno, o pulsando E en la estación. Se vende todo lo pescado.
-4. **Menú**: recuento (especie, rareza, cantidad, precio) → mejoras → "Iniciar día N".
+1. **Día**: empiezas en la superficie junto a la estación flotante. Título grande "Día N" con el reloj debajo, que luego sube a lo alto de la pantalla. El día dura **3 min** (`DAY_SECONDS`) y corre también en la superficie.
+2. **Oxígeno**: 30 s de base por inmersión. Solo baja bajo el agua y **se recarga en la superficie** (10 s por segundo, `OXYGEN_REFILL`). Si se acaba te **desmayas**: pierdes lo que llevas, apareces en el punto de inicio y el día sigue.
+3. **Pesca**: el arpón sale unido por un sedal, y no puedes volver a disparar hasta que se recoge. El pez clavado cuenta cuando llega a tu mano.
+4. **Noche** (1 min, `NIGHT_SECONDS`): oscurece en 10 s, salen las tres especies nocturnas y aparece el **cazador nocturno** (`hunter.gd`) a 45 m a tu espalda. Te persigue cada vez más rápido (5 → 11 m/s); si te alcanza **mueres**: pierdes la captura y termina el día. Un arponazo lo aturde 4 s. Junto a la estación estás a salvo (ronda a 22 m). Sus ojos rojos se ven a través de la niebla y gruñe más seguido al acercarse.
+5. **Entrega obligatoria**: lo pescado solo se cobra al **entregarlo en la estación** (E, tantas veces como quieras). Lo entregado queda a salvo; lo que llevas encima se pierde al desmayarte, al morir o si la noche acaba lejos de la estación. Con **T** se abre la terminal en la estación para comprar a mitad de día con lo ya cobrado.
+6. **Fin del día**: **mantener E** en la estación (de día o de noche) entrega lo que quede y termina el día. Recuento paso a paso por rareza, de Común a Legendario (filas con contador animado de 0,25 a 1,1 s; cada especie cae como un pez dibujado de grande a pequeño con golpe, temblor del panel y chispas, y gira una vuelta por ejemplar mientras suben las monedas. Por rareza: Poco común suelta más chispas, Raro destella y late, Épico tiñe el panel y llueven monedas, Legendario cae a cámara lenta con rayos que giran, destello dorado y sello "¡LEGENDARIO!"), luego acuario y encargo. "Saltar" lo completa; "Ir a la terminal" → mejoras → "Iniciar día N".
 
 ### Mundo
 
@@ -49,7 +54,7 @@ Además hay dos peces con powerup instantáneo en cualquier zona (5 de cada uno)
 
 - **Sitios fuera de la ruta** (`world.build_sites`): el **arrecife secreto** (entrante oeste de la zona 2, tapado por una cortina de algas; perlas y el pez mandarín, que solo vive ahí), el **pecio del Nereida** (zona 3; se entra por el costado partido; dos perlas negras) y la **cueva de cristal** (entrante este de la zona 4 con techo de losas; dos cristales). Al final del cañón está **el Latido**, el origen de la señal.
 - **Diario**: 8 notas (cápsulas ámbar con un haz de luz) repartidas del bajío al Latido. Se leen al tocarlas, no reaparecen y se releen en la pestaña Diario. Cuentan la historia mínima: la expedición del Nereida bajó siguiendo un pulso que sale del fondo.
-- **Eventos del día**: desde el día 3, un 40 % de los días trae uno al azar. **Tormenta**: más niebla, menos luz y el triple de variantes doradas/albinas. **Noche**: poca luz y tres especies nocturnas (pez luna, calamar luciérnaga, pez víbora). **Migración**: una especie normal aparece con el doble de ejemplares. Se anuncia al empezar el día y queda en el panel inferior.
+- **Eventos del día**: desde el día 3, un 40 % de los días trae uno al azar. **Tormenta**: más niebla, menos luz y el triple de variantes doradas/albinas. **Migración**: una especie normal aparece con el doble de ejemplares. Se anuncia al empezar el día y queda en el panel inferior.
 - **Capturas legendarias**: una por zona, siempre un único ejemplar al día. Aguantan varios arponazos y **recuperan toda la resistencia** si pasan unos segundos sin recibir impacto. La primera captura de cada una deja un **trofeo** en la estación (se conserva al renacer).
 
 | Zona | Legendaria | Valor | Mecánica |
@@ -74,7 +79,7 @@ Además hay dos peces con powerup instantáneo en cualquier zona (5 de cada uno)
 
 | Mejora | Efecto | Coste |
 |---|---|---|
-| Tanque de oxígeno | +6 s de día | 10 · 1,6^nivel |
+| Tanque de oxígeno | +6 s de oxígeno por inmersión | 10 · 1,6^nivel |
 | Aletas | +1 m/s | 15 · 1,7^nivel |
 | Sedal | +4 m de alcance | 12 · 1,6^nivel |
 | Carrete | +25 % velocidad de disparo y recogida | 20 · 1,7^nivel |
@@ -99,7 +104,7 @@ Marco de casco de buzo siempre visible (el color del aro cambia con el tramo del
 | `player.gd` | Cámara en primera persona, nado con inercia, límites del cañón y del fondo |
 | `harpoon.gd` | Lanza con sedal (estados HELD / OUT / BACK) y fusil en mano |
 | `fish.gd` | Pez: comportamientos, resistencia, peso y calidad de captura |
-| `station.gd` | Estación flotante hecha con primitivas |
+| `station.gd` | Estación flotante: cubierta, cabina con ventanas, terminal (letrero TERMINAL), arco ámbar del muelle de entrega (ENTREGA) en la proa, mástil, foco y módulos/trofeos |
 | `sfx.gd` | Efectos, música y ambientes sintetizados (superficie y bajo el agua) |
 | `juice.gd` | Partículas, burbujas y rayos de luz |
 | `sonar.gd` | Sonar de mano: modelo, pantalla de especies por zona, sondas y marcas |
@@ -107,6 +112,7 @@ Marco de casco de buzo siempre visible (el color del aro cambia con el tramo del
 | `hotbar.gd` | Barra de herramientas del HUD |
 | `hazards.gd` | Medusas, corrientes y señales visuales de peligro |
 | `fauna.gd` | Fauna no pescable: tortugas, mantas, ballena y medusas luminosas |
+| `hunter.gd` | Cazador nocturno: aparición, persecución, aturdido por el arpón y muerte del buzo |
 | `terminal.gd` | Mejoras agrupadas, requisitos, récords, enciclopedia de especies y diario |
 | `tests_milestone.gd` | Comprobaciones de integración de pesca, sonar, peligros y terminal |
 | `depth_gauge.gd` | Dibujo del indicador de zonas |
@@ -128,7 +134,7 @@ Para equilibrar, casi todo está en constantes al principio de `main.gd` (`SPECI
 - **Equilibrio sin probar**: duración del día, precios y costes son primeras estimaciones.
 - **HUD pensado para ventanas de unos 1150 px de ancho o más**; en más estrecho el panel inferior puede cortarse.
 - El primer movimiento del ratón al arrancar puede girar la cámara de golpe.
-- `main.gd` acepta argumentos de arranque solo para capturas automáticas (`cam=x,y,z,pitch,yaw`, `catch`, `end`, `shop`, `event=storm|night|migration`). No afectan al juego normal.
+- `main.gd` acepta argumentos de arranque solo para capturas automáticas (`cam=x,y,z,pitch,yaw`, `catch`, `end`, `shop`, `event=storm|migration`, `night` (empieza ya de noche)). No afectan al juego normal.
 - **La cueva no es una cueva de terreno**: el suelo es un mapa de alturas, así que es un entrante en la pared con losas sólidas por techo. Se puede nadar por encima de las losas.
 - Los peces de sitio y la fauna no tienen colisión: pueden atravesar el pecio o las losas.
 - El sonar lista al pez mandarín y a las legendarias aunque no se hayan descubierto: sirve de pista para encontrar los sitios.
@@ -197,7 +203,7 @@ Queda fuera: una séptima zona de profundidad (el traje, los materiales y el ind
 
 Retroalimentación del autor tras jugar el milestone 5. Cambia el bucle central, así que conviene hacerlo en este orden: primero el ciclo del día (de él dependen oxígeno, entrega y recuento), luego el mapa, y al final el equilibrio.
 
-**Ciclo de día y noche**
+**Ciclo de día y noche** — hecho (ver "Bucle de juego actual"). El evento "Noche" se quitó: las especies nocturnas salen en la fase de noche de cada día. El cazador atraviesa el decorado (sin física, como la fauna). Equilibrio sin probar: duración del día y la noche, recarga de oxígeno y velocidad del cazador.
 
 - El día pasa a durar un **tiempo propio** (reloj del día), separado del oxígeno. Ahora mismo el oxígeno es la duración del día: hay que desacoplarlos.
 - El **oxígeno se regenera al salir a la superficie**. Equilibrarlo contra la duración del día: el límite real pasa a ser el reloj, y el oxígeno limita cuánto dura cada inmersión.
@@ -205,12 +211,12 @@ Retroalimentación del autor tras jugar el milestone 5. Cambia el bucle central,
 - **Al agotarse el tiempo cae la noche** y aparece un **enemigo que te caza y puede matarte**. Morir hace perder lo que llevas encima. La noche da un margen extra de tiempo: seguir pescando es una apuesta a riesgo propio.
 - Decidir qué pasa con el evento "Noche" del milestone 5 (hoy es un día oscuro al azar con especies nocturnas): lo natural es que esas especies salgan en la fase de noche de cada día.
 
-**Entrega obligatoria en la nave**
+**Entrega obligatoria en la nave** — hecho. El encargo solo paga si lo entregado llega al objetivo; el acuario paga por pez entregado. Guardar a mitad de día conserva las monedas ya cobradas aunque el día se repita al cargar.
 
 - **Volver a la nave es obligatorio para cobrar**: lo pescado solo cuenta al entregarlo. Quedarse sin oxígeno o morir ya no vende la captura.
 - **E** entrega los peces mientras aún es de día (se puede entregar varias veces y volver a bajar); **mantener E** termina el día.
 
-**Estación y recuento**
+**Estación y recuento** — hecho: modelo nuevo de la estación (radio de estación 7,5 m, `STATION_RADIUS`), terminal accesible de día con T y recuento animado. El panel de la terminal sigue siendo el mismo de antes, solo que ahora se abre dentro de la estación.
 
 - Hacer de la estación un lugar más importante, no solo un punto donde pulsar E.
 - **Recuento paso a paso**: de menor a mayor rareza, mostrando cuánto generó el conjunto de peces de cada rareza, con animaciones que escalan con la cantidad de monedas y la rareza de lo capturado.

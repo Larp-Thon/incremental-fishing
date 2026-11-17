@@ -97,9 +97,11 @@ func _process(delta: float) -> void:
 			var wall: Dictionary = get_world_3d().direct_space_state.intersect_ray(ray)
 			if not wall.is_empty():
 				tip_to = wall.position
-			var hit_fish := false
+			var hit_fish: bool = main.hunter.harpooned(tip_from, tip_to)  # el cazador nocturno se aturde
 			# Segmento recorrido por la punta este frame: no atraviesa peces aunque bajen los FPS.
 			for fish in get_tree().get_nodes_in_group("fish"):
+				if hit_fish:
+					break
 				var p: Vector3 = fish.global_position
 				if not fish.hooked and not fish.hidden and Geometry3D.get_closest_point_to_segment(p, tip_from, tip_to).distance_to(p) < fish.hit_radius:
 					hit_fish = true

@@ -1,5 +1,5 @@
 extends Node3D
-# Estación flotante: punto de entrega y terminal de mejoras.
+# Estación flotante: muelle de entrega (proa), terminal de mejoras (delante de la cabina) y refugio de noche.
 # La cadena luminosa baja hasta el fondo para encontrarla desde abajo.
 
 var body := StaticBody3D.new()  # colisión de las piezas en forma de caja
@@ -9,16 +9,53 @@ var modules := {}
 func _ready() -> void:
 	add_child(body)
 	var orange := Color(0.95, 0.45, 0.15)
-	part(BoxMesh.new(), Vector3(7, 0.3, 7), Vector3(0, 0.3, 0), Color(0.72, 0.55, 0.38))  # cubierta
-	for x in [-3.0, 3.0]:
-		part(BoxMesh.new(), Vector3(1.2, 0.9, 7.6), Vector3(x, 0, 0), orange)  # flotadores
-	part(BoxMesh.new(), Vector3(1.2, 1.6, 0.6), Vector3(0, 1.25, -2.5), Color(0.2, 0.22, 0.27))  # terminal
-	part(BoxMesh.new(), Vector3(0.9, 0.6, 0.05), Vector3(0, 1.5, -2.18), Color(0.3, 0.9, 1.0), 2.0)  # pantalla
-	part(BoxMesh.new(), Vector3(1.4, 0.8, 1.0), Vector3(-2.0, 0.85, -2.3), Color(0.2, 0.45, 0.7))  # cajón de entrega
-	# CylinderMesh mide 2 de alto y 1 de diámetro por defecto.
-	part(CylinderMesh.new(), Vector3(0.12, 2.5, 0.12), Vector3(2.8, 2.95, -2.8), Color(0.8, 0.8, 0.82))  # mástil
-	part(SphereMesh.new(), Vector3(0.4, 0.4, 0.4), Vector3(2.8, 5.6, -2.8), orange, 3.0)  # baliza
+	var hull := Color(0.85, 0.87, 0.9)
+	var steel := Color(0.8, 0.8, 0.82)
+	var amber := Color(1.0, 0.75, 0.2)
+	# Plataforma: la parte delantera (+Z) mira al punto de inicio del buzo.
+	part(BoxMesh.new(), Vector3(10, 0.3, 10.4), Vector3(0, 0.3, -0.2), Color(0.72, 0.55, 0.38))  # cubierta
+	for x in [-4.4, 4.4]:
+		part(BoxMesh.new(), Vector3(1.4, 1.0, 11), Vector3(x, 0, -0.2), orange)  # flotadores
+	for x in [-4.9, 4.9]:
+		part(BoxMesh.new(), Vector3(0.08, 0.5, 10.4), Vector3(x, 0.75, -0.2), steel)  # barandillas
+	# Cabina con ventanas iluminadas y tejado.
+	part(BoxMesh.new(), Vector3(6, 2.6, 3.2), Vector3(0, 1.75, -3.6), hull)
+	part(BoxMesh.new(), Vector3(6.6, 0.25, 3.8), Vector3(0, 3.15, -3.6), Color(0.75, 0.25, 0.2))
+	for x in [-2.0, 2.0]:
+		part(BoxMesh.new(), Vector3(1.3, 0.7, 0.05), Vector3(x, 2.1, -1.98), Color(1.0, 0.85, 0.55), 1.2)
+	# Terminal de mejoras delante de la cabina.
+	part(BoxMesh.new(), Vector3(1.4, 1.7, 0.5), Vector3(0, 1.3, -1.7), Color(0.2, 0.22, 0.27))
+	part(BoxMesh.new(), Vector3(1.1, 0.7, 0.05), Vector3(0, 1.6, -1.43), Color(0.3, 0.9, 1.0), 2.0)
+	add_sign("TERMINAL", Vector3(0, 2.75, -1.9), Color(0.3, 0.9, 1.0))
+	# Muelle de entrega: arco ámbar en la proa, donde llega el buzo.
+	for x in [-1.4, 1.4]:
+		part(CylinderMesh.new(), Vector3(0.14, 1.4, 0.14), Vector3(x, 1.85, 4.7), amber, 1.5)
+	part(BoxMesh.new(), Vector3(3.1, 0.22, 0.22), Vector3(0, 3.25, 4.7), amber, 1.5)
+	part(BoxMesh.new(), Vector3(2.2, 0.7, 1.0), Vector3(-3.0, 0.8, 4.2), Color(0.2, 0.45, 0.7))  # cajón de entrega
+	add_sign("ENTREGA", Vector3(0, 3.75, 4.7), amber)
+	# Mástil con baliza, antena y foco que alumbra la cubierta de noche.
+	part(CylinderMesh.new(), Vector3(0.14, 3.0, 0.14), Vector3(2.4, 6.2, -4.2), steel)
+	part(SphereMesh.new(), Vector3(0.5, 0.5, 0.5), Vector3(2.4, 9.3, -4.2), orange, 3.0)
+	part(CylinderMesh.new(), Vector3(0.05, 1.2, 0.05), Vector3(-2.2, 4.4, -4.2), steel)
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color(1.0, 0.85, 0.6)
+	lamp.light_energy = 1.4
+	lamp.omni_range = 14.0
+	lamp.position = Vector3(0, 4.5, 1.0)
+	add_child(lamp)
 	part(CylinderMesh.new(), Vector3(0.1, 9.5, 0.1), Vector3(0, -9.5, 0), orange, 1.5)  # cadena al fondo
+
+
+func add_sign(text: String, pos: Vector3, color: Color) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = 96
+	label.pixel_size = 0.006
+	label.modulate = color
+	label.outline_size = 12
+	label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	label.position = pos
+	add_child(label)
 
 
 func part(mesh: PrimitiveMesh, size: Vector3, pos: Vector3, color: Color, glow := 0.0) -> void:

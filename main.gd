@@ -1,6 +1,8 @@
 extends Node3D
-# Bucle: cada día dura lo que dure el oxígeno (solo se gasta bajo el agua).
-# Al acabar el día se vende la captura, se compran mejoras y empieza el siguiente.
+# Bucle: cada día dura DAY_SECONDS y luego cae la noche (NIGHT_SECONDS) con un cazador suelto.
+# El oxígeno solo limita cada inmersión: se gasta bajo el agua y se recarga en la superficie.
+# La captura solo se cobra al entregarla en la estación (E); mantener E termina el día.
+# Al acabar el día sale el recuento, se compran mejoras y empieza el siguiente.
 # El mar se divide en zonas de profundidad; el traje decide hasta cuál aguantas la presión.
 
 const FISH := preload("res://fish.gd")
@@ -13,12 +15,18 @@ const START := Vector3(0, 0.8, 0)
 const POWER_SECONDS := 8.0
 const SPEED_BOOST := 1.8
 const LOW_OXYGEN := 8.0  # segundos a partir de los que el oxígeno parpadea
+const DAY_SECONDS := 180.0
+const NIGHT_SECONDS := 60.0
+const DUSK := 10.0  # segundos que tarda en oscurecer del todo al caer la noche
+const OXYGEN_REFILL := 10.0  # segundos de oxígeno recuperados por segundo en la superficie
+const HOLD_END := 1.2  # segundos manteniendo E en la estación para terminar el día
+const STATION_RADIUS := 7.5
 const BASE_SUPPORT := 3.0  # atm que aguanta el traje inicial (20 m: toda la zona 1)
 const SUIT_STEP := 0.4  # atm de soporte por nivel de traje: 5 niveles = una zona más
 const CRUSH_OVER := 2.0  # atm por encima del soporte a partir de las que salta el aviso grande
 const SUIT_BASE_COST := [30, 150, 450, 1300, 4000]  # coste base de cada tramo de 5 niveles
 # Teclas por defecto; se registran en el InputMap al arrancar y se cambian desde el menú.
-const KEYS := {forward = KEY_W, back = KEY_S, left = KEY_A, right = KEY_D, up = KEY_SPACE, down = KEY_CTRL, use = KEY_E, vehicle = KEY_V, lamp = KEY_F, tool1 = KEY_1, tool2 = KEY_2}
+const KEYS := {forward = KEY_W, back = KEY_S, left = KEY_A, right = KEY_D, up = KEY_SPACE, down = KEY_CTRL, use = KEY_E, vehicle = KEY_V, lamp = KEY_F, tool1 = KEY_1, tool2 = KEY_2, terminal = KEY_T}
 
 const CYAN := Color(0.35, 0.85, 1.0)
 const GREEN := Color(0.4, 0.9, 0.5)
@@ -60,7 +68,7 @@ const SPECIES := [
 	{name = "Pez rayo", rarity = "Especial", value = 0, zone = -1, color = Color(1.0, 1.0, 0.3), big = 0.7, glow = 1.5, count = 5, power = "speed", desc = "No se vende: da velocidad extra unos segundos."},
 	# Arrecife secreto.
 	{name = "Pez mandarín", rarity = "Raro", value = 30, zone = 1, color = Color(1.0, 0.5, 0.1), big = 0.7, glow = 0.5, count = 8, site = "reef", desc = "Colores imposibles. Solo vive en un rincón escondido tras las algas."},
-	# Nocturnas: solo aparecen los días de evento "Noche".
+	# Nocturnas: solo aparecen en la fase de noche de cada día.
 	{name = "Pez luna", rarity = "Raro", value = 12, zone = 0, color = Color(0.85, 0.9, 1.0), big = 1.5, glow = 1.2, count = 8, night = true, desc = "Sube al bajío cuando oscurece. Enorme, pálido y tranquilo."},
 	{name = "Calamar luciérnaga", rarity = "Raro", value = 30, zone = 1, color = Color(0.4, 0.75, 1.0), big = 0.7, glow = 1.6, count = 8, night = true, behavior = "shy", desc = "Un punto de luz azul entre las algas. Asustadizo."},
 	{name = "Pez víbora", rarity = "Épico", value = 180, zone = 3, color = Color(0.7, 1.0, 0.4), big = 1.2, glow = 1.4, count = 6, night = true, behavior = "ambush", resistance = 2, desc = "Caza de noche en el jardín luminoso. Embiste sin dudar."},
@@ -88,12 +96,11 @@ const NOTES := [
 # Eventos del día: a partir del día 3, algunos días traen uno.
 const EVENTS := {
 	storm = {name = "Tormenta", text = "poca visibilidad, más variantes raras"},
-	night = {name = "Noche", text = "salen especies nocturnas"},
 	migration = {name = "Migración", text = ""},
 }
 
 var upgrades := {
-	tank = {name = "Tanque de oxígeno", desc = "+6 s de día", base = 10, growth = 1.6, level = 0},
+	tank = {name = "Tanque de oxígeno", desc = "+6 s de oxígeno por inmersión", base = 10, growth = 1.6, level = 0},
 	fins = {name = "Aletas", desc = "+1 m/s nadando", base = 15, growth = 1.7, level = 0},
 	reach = {name = "Sedal", desc = "+4 m de alcance del arpón", base = 12, growth = 1.6, level = 0},
 	reel = {name = "Carrete", desc = "+25% velocidad de disparo y recogida", base = 20, growth = 1.7, level = 0},
@@ -119,6 +126,12 @@ var trophies := []  # índices de SPECIES de las legendarias capturadas alguna v
 var event := ""  # clave de EVENTS o "" en un día normal
 var migrant := -1  # especie con el doble de ejemplares en una migración
 var fauna: Node3D
+var hunter: Node3D
+var clock := 0.0  # segundos transcurridos del día; la noche empieza en DAY_SECONDS
+var night := false
+var clock_label: Label
+var day_title: Label
+var title_tween: Tween
 var damage_cooldown := 0.0
 var lamp_on := true
 var sonar_system: Node
@@ -129,6 +142,14 @@ var playing := false
 var coins := 0
 var bag := {}  # índice de SPECIES -> cantidad pescada hoy
 var bag_cash := {}  # valor real por especie tras tamaño y calidad
+var delivered := {}  # lo entregado hoy en la estación (ya cobrado): índice de SPECIES -> cantidad
+var delivered_cash := {}
+var hold_use := 0.0  # segundos que se lleva mantenida E en la estación
+var recount_tween: Tween
+var recount_text := ""
+var recount_stage: Control
+var shop_home := Vector2.ZERO  # posición del panel en reposo (el temblor vuelve aquí)
+var shake_tween: Tween
 var prices: Array[int] = []
 var contract_id := -1
 var contract_goal := 0
@@ -188,6 +209,7 @@ var save_path := "user://save_auto.json" if automated else "user://save.json"
 @onready var summary_page: VBoxContainer = $HUD/Shop/Margin/Summary
 @onready var summary_title: Label = $HUD/Shop/Margin/Summary/Title
 @onready var summary_list: RichTextLabel = $HUD/Shop/Margin/Summary/List
+@onready var next_button: Button = $HUD/Shop/Margin/Summary/Next
 @onready var upgrades_page: VBoxContainer = $HUD/Shop/Margin/Upgrades
 @onready var upgrades_title: Label = $HUD/Shop/Margin/Upgrades/Title
 @onready var start_button: Button = $HUD/Shop/Margin/Upgrades/Start
@@ -282,7 +304,7 @@ func bag_capacity() -> int:
 
 func near_station() -> bool:
 	var d := player.position - station.position
-	return Vector2(d.x, d.z).length() < 6.0 and d.y > -3.0
+	return Vector2(d.x, d.z).length() < STATION_RADIUS and d.y > -3.0
 
 
 # Antes del _ready de los hijos: el mundo necesita saber qué materiales ya se recogieron.
@@ -429,11 +451,15 @@ func _ready() -> void:
 	fauna = preload("res://fauna.gd").new()
 	add_child(fauna)
 	fauna.setup(self)
+	hunter = preload("res://hunter.gd").new()
+	add_child(hunter)
+	hunter.setup(self)
+	create_clock()
 	var hotbar: HBoxContainer = preload("res://hotbar.gd").new()
 	$HUD.add_child(hotbar)
 	hotbar.setup(self)
-	$HUD/Shop/Margin/Summary/Next.pressed.connect(show_upgrades)
-	start_button.pressed.connect(start_day)
+	next_button.pressed.connect(next_pressed)
+	start_button.pressed.connect(start_pressed)
 	prestige_button.pressed.connect(confirm_prestige)
 	var prestige_dialog := ConfirmationDialog.new()
 	prestige_dialog.name = "PrestigeConfirmation"
@@ -445,7 +471,7 @@ func _ready() -> void:
 	gauge.zone_size = ZONE
 	start_day()
 
-	# Solo para capturas automáticas: godot -- cam=x,y,z,pitch,yaw (grados) | catch | end | shop | event=night
+	# Solo para capturas automáticas: godot -- cam=x,y,z,pitch,yaw (grados) | catch | end | shop | event=storm | night
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("cam="):
 			var v := a.trim_prefix("cam=").split_floats(",")
@@ -453,6 +479,8 @@ func _ready() -> void:
 			player.rotation_degrees = Vector3(v[3], v[4], 0.0)
 		elif a.begins_with("event="):
 			start_day(a.trim_prefix("event="))
+		elif a == "night":
+			clock = DAY_SECONDS
 		elif a == "catch":
 			for f in get_tree().get_nodes_in_group("fish").slice(20, 32):
 				catch_fish(f)
@@ -466,6 +494,44 @@ func _ready() -> void:
 	if not automated:
 		menu.boot()
 	refresh_shop()
+
+
+# Título grande del día y reloj: el reloj nace bajo el título y luego sube a su sitio fijo.
+func create_clock() -> void:
+	day_title = Label.new()
+	day_title.add_theme_font_size_override("font_size", 96)
+	day_title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	day_title.add_theme_constant_override("outline_size", 10)
+	day_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	day_title.position = Vector2(0, 150)
+	day_title.size = Vector2(1152, 110)
+	day_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$HUD.add_child(day_title)
+	clock_label = Label.new()
+	clock_label.add_theme_font_size_override("font_size", 34)
+	clock_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	clock_label.add_theme_constant_override("outline_size", 6)
+	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	clock_label.size = Vector2(300, 46)
+	clock_label.pivot_offset = clock_label.size / 2.0
+	clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clock_label.hide()  # _process los muestra al jugar; con el menú de inicio el árbol está en pausa
+	day_title.hide()
+	$HUD.add_child(clock_label)
+
+
+func play_day_intro() -> void:
+	day_title.text = "Día %d" % day
+	day_title.modulate.a = 1.0
+	clock_label.position = Vector2(426, 265)
+	clock_label.scale = Vector2.ONE * 1.6
+	if title_tween:
+		title_tween.kill()
+	title_tween = create_tween()
+	title_tween.tween_interval(2.2)  # el contador se ve bajar bajo el título
+	title_tween.tween_property(day_title, "modulate:a", 0.0, 0.4)
+	title_tween.tween_property(clock_label, "position", Vector2(426, 10), 0.7).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	title_tween.parallel().tween_property(clock_label, "scale", Vector2.ONE, 0.7)
 
 
 func create_gear_visuals() -> void:
@@ -489,11 +555,13 @@ func scare(from: Vector3, radius: float) -> void:
 			f.fear = randf_range(2.0, 3.5)
 
 
-func spawn_fish() -> void:
-	for f in get_tree().get_nodes_in_group("fish"):
-		f.free()
+# Al empezar el día: todas las especies diurnas. nocturnal = true: añade solo las nocturnas.
+func spawn_fish(nocturnal := false) -> void:
+	if not nocturnal:
+		for f in get_tree().get_nodes_in_group("fish"):
+			f.free()
 	for id in SPECIES.size():
-		if SPECIES[id].get("night", false) and event != "night":
+		if SPECIES[id].get("night", false) != nocturnal:
 			continue
 		var leader: Node3D = null
 		for i in SPECIES[id].count * (2 if id == migrant else 1):
@@ -516,6 +584,9 @@ func start_day(forced := "") -> void:
 	tool = 0
 	world.respawn_pickups()
 	day += 1
+	clock = 0.0
+	night = false
+	hunter.hide()
 	event = forced
 	if forced == "" and day > 2 and randf() < 0.4:  # los dos primeros días son tranquilos: tutorial
 		event = EVENTS.keys().pick_random()
@@ -525,6 +596,9 @@ func start_day(forced := "") -> void:
 	speed_time = 0.0
 	bag.clear()
 	bag_cash.clear()
+	delivered.clear()
+	delivered_cash.clear()
+	hold_use = 0.0
 	prices.clear()
 	for s in SPECIES:
 		prices.append(int(round(float(s.value) * randf_range(0.8, 1.25))))
@@ -552,14 +626,18 @@ func start_day(forced := "") -> void:
 	var news := ""
 	if event != "":
 		news = "\n%s · %s" % [EVENTS[event].name, "bancos enormes de " + SPECIES[migrant].name if migrant >= 0 else EVENTS[event].text]
-	show_toast("Día %d%s" % [day, news], Color.WHITE)
-	hint("start", "Nada hacia delante y baja por el cañón: cuanto más hondo, más valen los peces.\nClic para disparar el arpón. El día dura lo que dure tu oxígeno.")
+	play_day_intro()
+	if news != "":
+		show_toast(news.strip_edges(), Color.WHITE)
+	hint("start", "Nada hacia delante y baja por el cañón: cuanto más hondo, más valen los peces. Clic para disparar.\nEntrega la captura en la estación con E para cobrarla. El oxígeno se recarga en la superficie.")
 
 
-func end_day() -> void:
+# lost: motivo por el que se perdió la captura (vacío si se vendió con normalidad).
+func end_day(lost := "") -> void:
 	if not playing:
 		return
 	playing = false
+	hunter.hide()
 	sonar_system.clear()
 	vehicle_active = false
 	vehicle_mesh.hide()
@@ -577,41 +655,305 @@ func end_day() -> void:
 		var passive_price := int(round(float(prices[id]) * (1.0 + 0.2 * lvl("hunter") + 0.25 * prestige_count)))
 		if store_catch(id, passive_price):
 			passive_caught += 1
-	var market_earned := bag_value()
+	bank_bag()  # en la estación (o solo trampas si se perdió la captura)
 	var contract_reward := prices[contract_id] * contract_goal * 2 if contract_caught >= contract_goal else 0
-	var aquarium_reward := bag_count() * 5 * lvl("aquarium")
-	var earned := market_earned + contract_reward + aquarium_reward
-	coins += earned
-	var ids := bag.keys()
-	ids.sort()
-	var text := "[table=4]"
-	for id in ids:
-		var s: Dictionary = SPECIES[id]
-		var color: String = RARITY[s.rarity].to_html(false)
-		text += "[cell padding=0,0,28,6][color=#%s]%s[/color][/cell]" % [color, s.name]
-		text += "[cell padding=0,0,28,6][color=#%s]%s[/color][/cell]" % [color, s.rarity]
-		text += "[cell padding=0,0,28,6]x%d[/cell]" % bag[id]
-		text += "[cell padding=0,0,0,6]%d monedas[/cell]" % bag_cash.get(id, s.value * bag[id])
-	text += "[/table]\n"
-	if bag.is_empty():
-		text = "No pescaste nada hoy.\n"
+	coins += contract_reward
+	# Recuento: una fila por rareza, de menor a mayor; luego acuario y encargo.
+	var rows := []
+	var total := 0
+	var fish_total := 0
+	for tier in RARITY.size():
+		var rarity: String = RARITY.keys()[tier]
+		var count := 0
+		var cash := 0
+		var names := []
+		var fish := []
+		for id in delivered:
+			if SPECIES[id].rarity == rarity:
+				count += delivered[id]
+				cash += delivered_cash[id]
+				names.append("%s x%d" % [SPECIES[id].name, delivered[id]])
+				fish.append(id)
+		if count > 0:
+			rows.append({label = "%s · %d %s" % [rarity, count, "pez" if count == 1 else "peces"], detail = ", ".join(names), amount = cash, color = RARITY[rarity], tier = tier, fish = fish, fx = tier})
+			total += cash
+			fish_total += count
+	if fish_total > 0 and lvl("aquarium") > 0:
+		rows.append({label = "Acuario", detail = "5 monedas por pez y nivel", amount = fish_total * 5 * lvl("aquarium"), color = CYAN, tier = 1, fish = [], fx = -1})
+		total += rows[-1].amount
+	if contract_reward > 0:
+		rows.append({label = "Encargo cumplido", detail = "%s x%d" % [SPECIES[contract_id].name, contract_goal], amount = contract_reward, color = AMBER, tier = 3, fish = [contract_id], fx = -1})
+		total += contract_reward
+	var header := ""
+	if lost != "":
+		header += "[color=#%s]%s: perdiste lo que llevabas encima.[/color]\n" % [RED.to_html(false), lost]
+	if passive_caught > 0:
+		header += "[color=#99aabb]Trampas: %d capturas[/color]\n" % passive_caught
+	if rows.is_empty():
+		header += "No entregaste nada hoy.\n"
+	var contract_line := "" if contract_reward > 0 else "[color=#99aabb]Encargo: %s %d/%d[/color]\n" % [SPECIES[contract_id].name, contract_caught, contract_goal]
 	summary_title.text = "Fin del día %d" % day
-	var contract_result := "Encargo cumplido: +%d monedas" % contract_reward if contract_reward > 0 else "Encargo: %s %d/%d" % [SPECIES[contract_id].name, contract_caught, contract_goal]
-	var module_result := "Acuario: +%d monedas" % aquarium_reward if aquarium_reward > 0 else ""
-	var trap_result := "Trampas: %d capturas" % passive_caught if passive_caught > 0 else ""
-	summary_list.text = text + "\nVenta: %d monedas\n%s\n%s\n%s\nTotal: %d monedas\nTienes: %d monedas" % [market_earned, contract_result, module_result, trap_result, earned, coins]
-	bag.clear()
-	bag_cash.clear()
-	refresh_bag()
 	upgrades_page.hide()
 	summary_page.show()
 	shop.show()
-	animate_sale_coins(earned)
+	play_recount(header + "\n", rows, "\n%s[color=#ffbf33][font_size=30]Total del día: %d monedas[/font_size][/color]\nTienes: %d monedas" % [contract_line, total, coins])
 	hint_label.modulate.a = 0.0
 	save_game()
 
 
+# Cobra lo que hay en la bolsa y lo pasa a lo entregado hoy. Devuelve lo ganado.
+func bank_bag() -> int:
+	var earned := bag_value() + bag_count() * 5 * lvl("aquarium")
+	for id in bag:
+		delivered[id] = delivered.get(id, 0) + bag[id]
+		delivered_cash[id] = delivered_cash.get(id, 0) + bag_cash[id]
+	coins += earned
+	bag.clear()
+	bag_cash.clear()
+	refresh_bag()
+	return earned
+
+
+func deliver() -> void:
+	if bag.is_empty():
+		return
+	var count := bag_count()
+	var earned := bank_bag()
+	show_toast("Entregados %d %s · +%d monedas" % [count, "pez" if count == 1 else "peces", earned], AMBER)
+	animate_sale_coins(earned)
+	sfx.play("coin")
+	sfx.play("catch", 1.2)
+	save_game()
+
+
+func row_line(row: Dictionary, shown: int) -> String:
+	return "[color=#%s][font_size=26]%s[/font_size][/color]   [color=#ffbf33][font_size=24]+%d[/font_size][/color] monedas\n[color=#8899aa][font_size=16]%s[/font_size][/color]\n" % [row.color.to_html(false), row.label, shown, row.detail]
+
+
+# Recuento paso a paso: cada fila sube su contador; más monedas y más rareza = más tiempo, monedas y brillo.
+func play_recount(header: String, rows: Array, footer: String) -> void:
+	recount_text = header
+	summary_list.text = header
+	next_button.text = "Saltar"
+	if recount_tween:
+		recount_tween.kill()
+	if not recount_stage:
+		recount_stage = Control.new()  # capa sobre el panel: aquí caen los peces del recuento
+		recount_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shop.add_child(recount_stage)
+		shop_home = shop.position
+	for child in recount_stage.get_children():
+		child.queue_free()
+	recount_tween = create_tween()
+	for row in rows:
+		# Rápido: cada fila dura entre 0,25 y 1,1 s según monedas y rareza.
+		var seconds := clampf(0.2 + 0.07 * log(1.0 + float(row.amount)) + 0.12 * row.tier, 0.25, 1.1)
+		recount_tween.tween_callback(func() -> void:
+			drop_row(row, seconds)
+			sfx.play("coin", 1.0 + 0.15 * row.tier)
+			animate_sale_coins(row.amount, row.color, 4 + 4 * row.tier))
+		recount_tween.tween_method(func(v: float) -> void: summary_list.text = recount_text + row_line(row, int(v)), 0, row.amount, seconds).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+		recount_tween.tween_callback(func() -> void: recount_text += row_line(row, row.amount))
+		recount_tween.tween_interval(0.06)
+	recount_tween.tween_callback(func() -> void:
+		summary_list.text = recount_text + footer
+		next_button.text = "Ir a la terminal")
+
+
+# Peces de una fila del recuento: caen de grande a pequeño uno tras otro, golpean (temblor, sonido
+# y chispas) y giran sin parar mientras suben las monedas, más rápido cuantos más se pescaron.
+func drop_row(row: Dictionary, seconds: float) -> void:
+	summary_list.text = recount_text
+	var y := summary_list.global_position.y - recount_stage.global_position.y + summary_list.get_content_height() + 16.0
+	for i in row.fish.size():
+		var id: int = row.fish[i]
+		var count: int = maxi(1, delivered.get(id, 1))
+		var spot := Vector2(560.0 + 64.0 * i, y)
+		var icon := fish_icon(SPECIES[id].color, SPECIES[id].get("glow", 0.0) > 0.5)
+		icon.position = spot
+		icon.scale = Vector2.ONE * 3.2
+		icon.modulate.a = 0.0
+		recount_stage.add_child(icon)
+		var tag := Label.new()
+		tag.text = "x%d" % count
+		tag.position = spot + Vector2(24, 2)
+		tag.add_theme_font_size_override("font_size", 16)
+		tag.modulate.a = 0.0
+		recount_stage.add_child(tag)
+		var fall := 0.2 + (0.25 if row.fx == 4 else 0.0)  # la legendaria cae a cámara lenta
+		var t := icon.create_tween()  # muere con el pez si se cierra el recuento
+		t.tween_interval(0.07 * i)
+		t.tween_property(icon, "modulate:a", 1.0, 0.06)
+		t.parallel().tween_property(icon, "scale", Vector2.ONE, fall).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		t.tween_callback(func() -> void:
+			land(spot, row, i == 0)
+			tag.modulate.a = 1.0)
+		# Giro constante mientras sube el contador: una vuelta por pez, hasta 6.
+		t.tween_property(icon, "rotation", TAU * mini(count, 6), maxf(seconds, 0.3 + 0.1 * mini(count, 6)))
+		t.tween_callback(func() -> void: icon.rotation = 0.0)
+		if row.fx == 2:  # Raro: late una vez al terminar
+			t.tween_property(icon, "scale", Vector2.ONE * 1.35, 0.08)
+			t.tween_property(icon, "scale", Vector2.ONE, 0.12)
+
+
+# Golpe al caer: temblor, sonido y chispas; el primero de cada fila dispara el efecto de su rareza.
+func land(spot: Vector2, row: Dictionary, first: bool) -> void:
+	var fx: int = row.fx
+	sfx.play("thud", randf_range(0.9, 1.1) - 0.08 * maxi(fx, 0))
+	shake(3.0 + 3.0 * maxi(fx, 0))
+	sparks(spot, row.color, 8 + 5 * maxi(fx, 0))
+	if not first:
+		return
+	match fx:
+		1:  # Poco común: chispas extra en anillo
+			sparks(spot, Color.WHITE, 10)
+		2:  # Raro: destello suave
+			flash(row.color, 0.18)
+		3:  # Épico: destello fuerte y lluvia de monedas
+			flash(row.color, 0.35)
+			sfx.play("catch", 0.9)
+			animate_sale_coins(row.amount, row.color, 20)
+		4:  # Legendario: rayos que giran, sello y destello dorado
+			flash(row.color, 0.5)
+			sfx.play("catch", 0.7)
+			sfx.play("whale", 1.6)
+			rays(spot, row.color)
+			stamp("¡LEGENDARIO!", row.color)
+
+
+func fish_icon(color: Color, glows: bool) -> Control:
+	var icon := Control.new()
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.draw.connect(func() -> void:
+		if glows:
+			icon.draw_circle(Vector2.ZERO, 20.0, Color(color, 0.25))
+		var body := PackedVector2Array()
+		for k in 12:
+			body.append(Vector2(cos(k * TAU / 12.0) * 15.0, sin(k * TAU / 12.0) * 8.0))
+		icon.draw_colored_polygon(body, color)
+		icon.draw_colored_polygon(PackedVector2Array([Vector2(12, 0), Vector2(22, -8), Vector2(22, 8)]), color.darkened(0.25))
+		icon.draw_circle(Vector2(-8, -2), 2.0, Color(0.05, 0.05, 0.1)))
+	return icon
+
+
+func sparks(at: Vector2, color: Color, count: int) -> void:
+	for k in count:
+		var spark := ColorRect.new()
+		spark.size = Vector2(4, 4)
+		spark.color = color.lightened(0.3)
+		spark.position = at
+		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		recount_stage.add_child(spark)
+		var dir := Vector2.from_angle(randf() * TAU) * randf_range(25.0, 70.0)
+		var t := spark.create_tween().set_parallel(true)
+		t.tween_property(spark, "position", at + dir, 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		t.tween_property(spark, "modulate:a", 0.0, 0.4)
+		t.tween_property(spark, "rotation", randf_range(-6.0, 6.0), 0.4)
+		t.chain().tween_callback(spark.queue_free)
+
+
+func shake(power: float) -> void:
+	if shake_tween:
+		shake_tween.kill()
+	shake_tween = create_tween()
+	for k in 4:
+		shake_tween.tween_property(shop, "position", shop_home + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * power * (1.0 - k / 4.0), 0.03)
+	shake_tween.tween_property(shop, "position", shop_home, 0.03)
+
+
+func flash(color: Color, strength: float) -> void:
+	var cover := ColorRect.new()
+	cover.color = Color(color, strength)
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.size = shop.size
+	recount_stage.add_child(cover)
+	var t := cover.create_tween()
+	t.tween_property(cover, "modulate:a", 0.0, 0.45)
+	t.tween_callback(cover.queue_free)
+
+
+# Legendario: estrella de rayos que gira detrás del pez y se apaga.
+func rays(at: Vector2, color: Color) -> void:
+	var star := Control.new()
+	star.position = at
+	star.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	star.draw.connect(func() -> void:
+		for k in 10:
+			star.draw_line(Vector2.ZERO, Vector2.from_angle(k * TAU / 10.0) * 46.0, Color(color, 0.7), 3.0))
+	recount_stage.add_child(star)
+	recount_stage.move_child(star, 0)
+	var t := star.create_tween().set_parallel(true)
+	t.tween_property(star, "rotation", TAU, 1.6)
+	t.tween_property(star, "modulate:a", 0.0, 1.6).set_ease(Tween.EASE_IN)
+	t.chain().tween_callback(star.queue_free)
+
+
+func stamp(text: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 64)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	label.add_theme_constant_override("outline_size", 10)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.size = Vector2(shop.size.x, 80)
+	label.position = Vector2(0, shop.size.y * 0.42)
+	label.pivot_offset = label.size / 2.0
+	label.scale = Vector2.ONE * 2.5
+	label.rotation = -0.08
+	recount_stage.add_child(label)
+	var t := label.create_tween()
+	t.tween_property(label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_interval(0.7)
+	t.tween_property(label, "modulate:a", 0.0, 0.35)
+	t.tween_callback(label.queue_free)
+
+
+# Quita los peces y efectos del recuento para que no tapen la terminal.
+func clear_recount() -> void:
+	if not recount_stage:
+		return
+	for child in recount_stage.get_children():
+		child.queue_free()
+	if shake_tween:
+		shake_tween.kill()
+	shop.position = shop_home
+
+
+# Botón del recuento: primero salta la animación; después lleva a la terminal.
+func next_pressed() -> void:
+	if recount_tween and recount_tween.is_running():
+		recount_tween.custom_step(999.0)
+	else:
+		show_upgrades()
+
+
+# Terminal de la estación durante el día: compra con lo ya entregado. El reloj se para mientras está abierta.
+func open_terminal() -> void:
+	clear_recount()
+	summary_page.hide()
+	upgrades_page.show()
+	refresh_shop()
+	shop.show()
+	player.locked = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func close_terminal() -> void:
+	shop.hide()
+	player.locked = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func start_pressed() -> void:
+	if playing:
+		close_terminal()
+	else:
+		start_day()
+
+
 func show_upgrades() -> void:
+	clear_recount()
 	summary_page.hide()
 	upgrades_page.show()
 	refresh_shop()
@@ -665,6 +1007,7 @@ func catch_fish(fish: Node) -> void:
 			show_toast("%s\nVelocidad x%.1f durante %d s" % [s.name, SPEED_BOOST, POWER_SECONDS], RARITY[s.rarity])
 		_:
 			var sold_for := sale_price(fish)
+			hint("deliver", "Lo pescado solo se cobra al entregarlo en la estación (E).\nSi te desmayas o te cazan, pierdes lo que llevas encima.")
 			if not store_catch(fish.species_id, sold_for):
 				show_toast("Bolsa llena: mejora la capacidad para llevar más peces", AMBER)
 				fish.respawn()
@@ -742,15 +1085,15 @@ func show_float(text: String, world_pos: Vector3, color: Color) -> void:
 
 
 # Pequeña lluvia de monedas al cerrar el recuento; representa la venta sin retrasar la tienda.
-func animate_sale_coins(earned: int) -> void:
+func animate_sale_coins(earned: int, color := AMBER, most := 8) -> void:
 	if earned <= 0:
 		return
-	for i in mini(8, ceili(float(earned) / 4.0)):
+	for i in mini(most, ceili(float(earned) / 4.0)):
 		var coin := Label.new()
 		coin.text = "●"
 		coin.position = Vector2(560 + randf_range(-90.0, 90.0), 315 + randf_range(-55.0, 55.0))
 		coin.add_theme_font_size_override("font_size", 22)
-		coin.add_theme_color_override("font_color", AMBER)
+		coin.add_theme_color_override("font_color", color)
 		coin.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.8))
 		coin.add_theme_constant_override("outline_size", 4)
 		$HUD.add_child(coin)
@@ -771,11 +1114,14 @@ func refresh_bag() -> void:
 		var s: Dictionary = SPECIES[id]
 		text += "[color=#%s]%s[/color]  x%d · %d monedas\n" % [RARITY[s.rarity].to_html(false), s.name, bag[id], bag_cash.get(id, 0)]
 	var contract_line := "Encargo: %s %d/%d (+%d)" % [SPECIES[contract_id].name, contract_caught, contract_goal, prices[contract_id] * contract_goal * 2] if contract_id >= 0 and prices.size() == SPECIES.size() else "Encargo diario: disponible al iniciar el día"
-	bag_label.text = text + "\nBolsa: %d/%d\nValor: %d monedas\n%s" % [bag_count(), bag_capacity(), bag_value(), contract_line]
+	bag_label.text = text + "\nBolsa: %d/%d\nSin entregar: %d monedas\n%s" % [bag_count(), bag_capacity(), bag_value(), contract_line]
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
+		return
+	if playing and shop.visible and event.is_action_pressed("terminal"):
+		close_terminal()
 		return
 	if not playing or player.locked:  # la pantalla del sonar bloquea el resto del equipo
 		return
@@ -793,7 +1139,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("vehicle"):
 		toggle_vehicle()
 	if near_station() and event.is_action_pressed("use"):
-		end_day()
+		deliver()
+	if near_station() and event.is_action_pressed("terminal"):
+		open_terminal()
 
 
 # Inventario: 0 = arpón, 1 = sonar. No se cambia con la lanza fuera ni conduciendo el vehículo.
@@ -855,7 +1203,53 @@ func hurt(amount: float, cause: String) -> void:
 	sfx.play("hurt")
 	show_toast("%s · -%.0f s de oxígeno" % [cause, amount], RED)
 	if oxygen <= 0:
+		faint()
+
+
+# Lo que llevas encima se pierde (sin aire, muerto o con la noche lejos de la estación).
+func lose_catch() -> void:
+	contract_caught -= bag.get(contract_id, 0)
+	bag.clear()
+	bag_cash.clear()
+	harpoon.reset()
+	refresh_bag()
+
+
+# Sin oxígeno: te desmayas, pierdes la captura y despiertas junto a la estación. El día sigue.
+func faint() -> void:
+	lose_catch()
+	vehicle_active = false
+	vehicle_mesh.hide()
+	oxygen = max_oxygen()
+	player.position = START
+	player.velocity = Vector3.ZERO
+	sfx.play("hurt")
+	show_toast("Te desmayaste sin aire\nPerdiste la captura", RED)
+
+
+func die(cause: String) -> void:
+	lose_catch()
+	player.shake = 1.5
+	sfx.play("hurt", 0.6)
+	end_day(cause)
+
+
+func nightfall() -> void:
+	night = true
+	spawn_fish(true)
+	hunter.appear()
+	sfx.play("alarm", 0.5)
+	show_toast("Cae la noche\nAlgo te está cazando", RED)
+	hint("night", "De noche salen especies nocturnas, pero un cazador te persigue: si te alcanza pierdes la captura.\nUn arponazo lo aturde. Junto a la estación estás a salvo.")
+
+
+# Fin de la noche: solo se vende lo que llevas si estás en la estación.
+func night_over() -> void:
+	if near_station():
 		end_day()
+	else:
+		lose_catch()
+		end_day("La noche acabó lejos de la estación")
 
 
 func recipe_material(id: String) -> int:
@@ -887,6 +1281,13 @@ func _process(delta: float) -> void:
 	var over := pressure(depth) - support()
 	if playing:
 		damage_cooldown = maxf(0.0, damage_cooldown - delta)
+		if not shop.visible:  # con la terminal abierta el reloj se para
+			clock += delta
+		if not night and clock >= DAY_SECONDS:
+			nightfall()
+		if clock >= DAY_SECONDS + NIGHT_SECONDS:
+			night_over()
+			return
 		if vehicle_active:
 			vehicle_battery = maxf(vehicle_battery - delta, 0.0)
 			if vehicle_battery <= 0.0:
@@ -900,11 +1301,12 @@ func _process(delta: float) -> void:
 			lamp_light.omni_range = 16.0 + 4.0 * lvl("lamp")
 		air_time = maxf(air_time - delta, 0.0)
 		speed_time = maxf(speed_time - delta, 0.0)
-		if y < 0.0 and air_time <= 0.0:
+		if y >= 0.0:
+			oxygen = minf(oxygen + delta * OXYGEN_REFILL, max_oxygen())
+		elif air_time <= 0.0:
 			oxygen -= delta * drain
 			if oxygen <= 0.0:
-				end_day()
-				return
+				faint()
 		# Respiración: se acelera con poco oxígeno.
 		breath -= delta
 		if y < 0.0 and breath <= 0.0:
@@ -913,7 +1315,7 @@ func _process(delta: float) -> void:
 		if over > 0.0:
 			hint("pressure", "Tu traje no aguanta esta presión: aquí el oxígeno se gasta más rápido.\nMejora el traje de presión para bajar más.")
 		if oxygen < LOW_OXYGEN:
-			hint("oxygen", "Queda poco oxígeno. Cuando se acabe termina el día y se vende lo pescado.\nTambién puedes entregar antes en la estación.")
+			hint("oxygen", "Queda poco oxígeno: sube a la superficie para recargarlo.\nSi se acaba te desmayas y pierdes lo que llevas.")
 		# Materiales del traje: se recogen al tocarlos y no reaparecen.
 		for p in world.pickups:
 			if p.position.distance_to(player.position) < 2.5:
@@ -942,7 +1344,8 @@ func _process(delta: float) -> void:
 		env.fog_enabled = under
 		env.background_mode = Environment.BG_COLOR if under else Environment.BG_SKY
 	var t := clampf(depth / MAX_DEPTH, 0.0, 1.0)
-	var dim := 0.45 if event == "night" else (0.6 if event == "storm" else 1.0)  # noche y tormenta oscurecen
+	var dark := clampf((clock - DAY_SECONDS) / DUSK, 0.0, 1.0) if night else 0.0
+	var dim := lerpf(1.0, 0.4, dark) * (0.6 if event == "storm" else 1.0)  # noche y tormenta oscurecen
 	var c := SHALLOW.lerp(DEEP, sqrt(t)).darkened(1.0 - dim)
 	env.background_color = c
 	env.fog_light_color = c
@@ -958,6 +1361,11 @@ func _process(delta: float) -> void:
 	var state := GREEN if over <= 0.0 else (AMBER if over < CRUSH_OVER else RED)
 	info.text = "Día %d%s  ·  %d monedas" % [day, " · " + str(EVENTS[event].name) if event != "" else "", coins]
 	oxygen_label.text = "O2 %ds" % ceili(maxf(oxygen, 0.0))
+	var left := ceili(maxf((DAY_SECONDS + NIGHT_SECONDS if night else DAY_SECONDS) - clock, 0.0))
+	clock_label.visible = playing and not menu.visible  # no se ve tras el menú de inicio ni en la pausa
+	day_title.visible = clock_label.visible
+	clock_label.text = "%s %d:%02d" % ["Noche" if night else "Día", left / 60, left % 60]
+	clock_label.modulate = RED if night and (blink or left > 15) else Color.WHITE  # parpadea los últimos 15 s
 	oxygen_label.modulate = RED if low else Color.WHITE
 	oxygen_fill.bg_color = RED if low else CYAN
 	oxygen_bar.max_value = max_oxygen()
@@ -993,8 +1401,20 @@ func _process(delta: float) -> void:
 		if mats[i] > 0:
 			mats_label.text += "%s x%d\n" % [world.MATERIALS[i].name, mats[i]]
 
-	prompt.visible = playing and near_station()
-	prompt.text = "[%s] Terminar el día y entregar los peces" % key_name("use")
+	# Mantener E en la estación termina el día; soltar antes solo entrega.
+	if playing and near_station() and not player.locked and Input.is_action_pressed("use"):
+		hold_use += delta
+		if hold_use >= HOLD_END:
+			hold_use = 0.0
+			end_day()
+			return
+	else:
+		hold_use = 0.0
+	prompt.visible = playing and near_station() and not shop.visible
+	if hold_use > 0.15:
+		prompt.text = "Terminando el día… %d%%" % int(hold_use / HOLD_END * 100.0)
+	else:
+		prompt.text = "[%s] %s  ·  mantén [%s] terminar el día  ·  [%s] Terminal" % [key_name("use"), "Entregar %d peces" % bag_count() if bag_count() > 0 else "Nada que entregar", key_name("use"), key_name("terminal")]
 	var target := station.position + Vector3.UP
 	marker.visible = playing and not near_station() and not cam.is_position_behind(target)
 	if marker.visible:

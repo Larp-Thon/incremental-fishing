@@ -111,7 +111,7 @@ func open() -> void:
 		zone_titles[zone].modulate = main.CYAN if zone == here else Color(0.7, 0.8, 0.85)
 	for id in buttons:
 		var s: Dictionary = main.SPECIES[id]
-		buttons[id].visible = main.event == "night" or not s.get("night", false)  # las nocturnas, solo si han salido
+		buttons[id].visible = main.night or not s.get("night", false)  # las nocturnas, solo si han salido
 		var trend := int(round(100.0 * main.prices[id] / float(s.value))) - 100
 		buttons[id].text = "%s%s · %d monedas (%+d%%)" % ["★ " if id == main.contract_id else "", s.name, main.prices[id], trend]
 	panel.move_to_front()  # por encima de la barra de herramientas

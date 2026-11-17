@@ -82,8 +82,8 @@ func _process(delta: float) -> void:
 	if under and bubble_wait <= 0.0:
 		bubble_wait = randf_range(0.18, 0.4)
 		var b := bubbles[bubble_cursor]
-		b.position = player.position + player.global_basis * Vector3(randf_range(-0.16, 0.16), 0.05, 0.25)
-		b.scale = Vector3.ONE * randf_range(0.55, 1.25)
+		b.position = main.cam.global_transform * Vector3(randf_range(-0.1, 0.1), -0.4, -0.75)  # justo bajo la boca, a la vista
+		b.scale = Vector3.ONE * randf_range(0.25, 0.55)  # tan cerca del visor, más pequeñas
 		b.visible = true
 		bubble_age[bubble_cursor] = 0.0
 		bubble_cursor = (bubble_cursor + 1) % BUBBLE_COUNT

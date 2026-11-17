@@ -1,7 +1,7 @@
 extends PanelContainer
 # Menú principal, pausa y opciones en un solo panel (Esc lo abre y lo cierra).
 
-const ACTIONS := {forward = "Avanzar", back = "Retroceder", left = "Izquierda", right = "Derecha", up = "Subir", down = "Bajar", use = "Entregar", vehicle = "Vehículo", lamp = "Linterna", tool1 = "Arpón", tool2 = "Sonar"}
+const ACTIONS := {forward = "Avanzar", back = "Retroceder", left = "Izquierda", right = "Derecha", up = "Subir", down = "Bajar", use = "Entregar", vehicle = "Vehículo", lamp = "Linterna", tool1 = "Arpón", tool2 = "Sonar", terminal = "Terminal"}
 const RESET := "Nueva partida"
 
 static var booted := false  # tras "Nueva partida" la escena se recarga sin volver a pasar por el menú
@@ -98,7 +98,7 @@ func close() -> void:
 	hide()
 	get_tree().paused = false
 	main.save_game()  # guarda las opciones
-	if main.playing:
+	if main.playing and not main.player.locked:  # con la terminal o el sonar abiertos el ratón sigue libre
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
