@@ -1,7 +1,7 @@
 extends PanelContainer
 # Menú principal, pausa y opciones en un solo panel (Esc lo abre y lo cierra).
 
-const ACTIONS := {forward = "Avanzar", back = "Retroceder", left = "Izquierda", right = "Derecha", up = "Subir", down = "Bajar", use = "Entregar", vehicle = "Vehículo", sonar = "Sonar", lamp = "Linterna"}
+const ACTIONS := {forward = "Avanzar", back = "Retroceder", left = "Izquierda", right = "Derecha", up = "Subir", down = "Bajar", use = "Entregar", vehicle = "Vehículo", lamp = "Linterna", tool1 = "Arpón", tool2 = "Sonar"}
 const RESET := "Nueva partida"
 
 static var booted := false  # tras "Nueva partida" la escena se recarga sin volver a pasar por el menú

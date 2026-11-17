@@ -32,10 +32,14 @@ func _process(delta: float) -> void:
 	velocity = velocity.lerp(wish.limit_length(1.0) * main.swim_speed(), 3.0 * delta)
 	if not locked and main.hazards:
 		velocity += main.hazards.current_force * delta * 3.0
+	var before := position
 	move_and_slide()
-	# Red de seguridad además de la colisión: límites del cañón y altura mínima sobre el fondo.
-	position.x = clampf(position.x, -63.0, 63.0)
-	position.z = clampf(position.z, -253.0, 53.0)
+	# Red de seguridad además de la colisión: no se sube por las paredes (por ejes, para poder
+	# deslizarse a lo largo de ellas) y altura mínima sobre el fondo.
+	if main.world.wall(position.x, before.z) > 0.08:
+		position.x = before.x
+	if main.world.wall(position.x, position.z) > 0.08:
+		position.z = before.z
 	position.y = clampf(position.y, main.world.floor_y(position.x, position.z) + 0.7, MAX_Y)
 	# Retroceso y sacudida: solo se mueve la cámara, no el cuerpo.
 	kick = lerpf(kick, 0.0, 9.0 * delta)

@@ -28,14 +28,29 @@ void fragment() {
 	col = mix(col, vec3(0.85, 0.9, 0.95), fog);
 	a = max(a, fog * 0.5);
 
-	// Gotas: una por celda de una rejilla, con tamaño y sitio al azar; resbalan mientras se secan.
-	vec2 g = UV * vec2(18.0, 10.0);
-	float r = fract(sin(dot(floor(g), vec2(12.9898, 78.233))) * 43758.5453);
-	vec2 c = fract(g) - 0.5 + (vec2(r, fract(r * 7.0)) - 0.5) * 0.5;
-	c.y -= (1.0 - wet) * r * 0.3;
-	float drop = smoothstep(0.16 * r + 0.03, 0.0, length(c * vec2(1.0, 0.7))) * wet * step(0.45, r) * glass;
-	col = mix(col, vec3(0.8, 0.92, 1.0), drop);
-	a = max(a, drop * 0.45);
+	// Gotas: caen por columnas a distinta velocidad, casi transparentes (borde y brillo), con un
+	// rastro fino, y se desvanecen según se seca el visor (wet 1 -> 0).
+	float fade = smoothstep(0.0, 0.5, wet) * glass;
+	for (int layer = 0; layer < 2; layer++) {
+		float cols = 22.0 + 9.0 * float(layer);
+		float col_id = floor(UV.x * cols) + 37.0 * float(layer);
+		float r = fract(sin(col_id * 12.9898) * 43758.5453);
+		float v = UV.y * 4.0 - (1.0 - wet) * (1.5 + 3.5 * r) + r * 9.0;
+		float r2 = fract(sin(dot(vec2(col_id, floor(v)), vec2(12.9898, 78.233))) * 43758.5453);
+		vec2 l = vec2(fract(UV.x * cols) - 0.5 - (r2 - 0.5) * 0.4, fract(v) - 0.7);
+		float rad = 0.1 + 0.14 * r2;
+		vec2 q = vec2(l.x, l.y * cols / 4.0 * 0.5625 * 0.7);  // algo alargada en pantalla 16:9
+		q.x *= 1.0 - clamp(q.y / rad, -1.0, 0.0) * 0.9;  // forma de lágrima: se estrecha por arriba
+		float dist = length(q);
+		float on = step(0.5, r2) * fade;
+		float body_drop = smoothstep(rad, rad * 0.8, dist);
+		float edge = body_drop * smoothstep(rad * 0.45, rad, dist);
+		float spec = smoothstep(rad * 0.3, 0.0, length(q + vec2(0.3, 0.35) * rad));
+		float trail = smoothstep(0.07, 0.0, abs(l.x)) * smoothstep(-0.6, 0.0, l.y) * step(l.y, 0.0);
+		float drop_a = (body_drop * 0.09 + edge * 0.17 + spec * 0.6 + trail * 0.2) * on;
+		col = mix(col, mix(vec3(0.75, 0.9, 1.0), vec3(1.0), spec), step(a, drop_a));
+		a = max(a, drop_a);
+	}
 
 	COLOR = vec4(col, a);
 }

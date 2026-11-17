@@ -10,6 +10,9 @@ var main: Node
 var cards := {}
 var tabs: TabContainer
 var records_view: RichTextLabel
+var species_view: RichTextLabel
+var journal_view: RichTextLabel
+const SITES := {reef = "arrecife secreto", wreck = "pecio del Nereida", cave = "cueva de cristal"}
 var materials: Label
 
 func setup(owner_node: Node) -> void:
@@ -22,7 +25,7 @@ func setup(owner_node: Node) -> void:
 	main.shop.custom_minimum_size = Vector2(940, 570)
 	main.get_node("HUD/Shop/Margin/Upgrades/Buttons").hide()
 	materials = Label.new()
-	materials.add_theme_font_size_override("font_size", 14)
+	materials.add_theme_font_size_override("font_size", 18)
 	materials.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.upgrades_page.add_child(materials)
 	main.upgrades_page.move_child(materials, 1)
@@ -62,15 +65,15 @@ func setup(owner_node: Node) -> void:
 			copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(copy)
 			var title := Label.new()
-			title.add_theme_font_size_override("font_size", 19)
+			title.add_theme_font_size_override("font_size", 22)
 			copy.add_child(title)
 			var detail := Label.new()
 			detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			detail.add_theme_font_size_override("font_size", 15)
+			detail.add_theme_font_size_override("font_size", 18)
 			copy.add_child(detail)
 			var reason := Label.new()
 			reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			reason.add_theme_font_size_override("font_size", 14)
+			reason.add_theme_font_size_override("font_size", 18)
 			copy.add_child(reason)
 			var buy := Button.new()
 			buy.custom_minimum_size = Vector2(165, 68)
@@ -78,11 +81,9 @@ func setup(owner_node: Node) -> void:
 			buy.pressed.connect(main.buy.bind(id))
 			row.add_child(buy)
 			cards[id] = {title = title, detail = detail, reason = reason, buy = buy}
-	records_view = RichTextLabel.new()
-	records_view.name = "Récords"
-	records_view.bbcode_enabled = true
-	records_view.add_theme_font_size_override("normal_font_size", 17)
-	tabs.add_child(records_view)
+	records_view = text_tab("Récords")
+	species_view = text_tab("Especies")
+	journal_view = text_tab("Diario")
 	var legacy := VBoxContainer.new()
 	legacy.name = "Prestigio"
 	tabs.add_child(legacy)
@@ -93,6 +94,25 @@ func setup(owner_node: Node) -> void:
 	main.prestige_button.reparent(legacy)
 	main.prestige_button.text = "Renacer (+25% de venta)"
 	main.start_button.custom_minimum_size.y = 42
+
+func text_tab(title: String) -> RichTextLabel:
+	var view := RichTextLabel.new()
+	view.name = title
+	view.bbcode_enabled = true
+	view.add_theme_font_size_override("normal_font_size", 20)
+	tabs.add_child(view)
+	return view
+
+
+# Dónde vive una especie. El sitio concreto solo se revela al descubrirla.
+func habitat(s: Dictionary, known: bool) -> String:
+	var where: String = "Cualquier zona" if s.zone < 0 else "Zona %d · %s" % [s.zone + 1, main.sonar_system.ZONES[s.zone]]
+	if known and s.has("site"):
+		where += " · " + SITES[s.site]
+	if s.get("night", false):
+		where += " · solo de noche"
+	return where
+
 
 func refresh() -> void:
 	main.upgrades_title.text = "Terminal de buceo · %d monedas" % main.coins
@@ -119,8 +139,26 @@ func refresh() -> void:
 			card.detail.text += "\nCoste adicional: 1 %s" % main.world.MATERIALS[material].name
 	main.prestige_button.disabled = main.lvl("suit") < 25 or main.coins < 100000
 	records_view.text = "[b]Récords personales · se conservan al renacer[/b]\n\n"
-	for id in range(13):
+	var found := 0
+	var species := ""
+	for id in main.SPECIES.size():
+		var s: Dictionary = main.SPECIES[id]
 		var record: Dictionary = main.records.get(str(id), {})
-		records_view.text += "%s: %s\n\n" % [main.SPECIES[id].name,
-			"%.2f kg · mejor venta %d monedas · %d capturas" % [record.get("weight", 0), record.get("value", 0), record.get("count", 0)] if not record.is_empty() else "Sin capturas"]
+		var known := not record.is_empty()
+		found += int(known)
+		if int(s.value) > 0:
+			records_view.text += "%s: %s\n\n" % [s.name if known else "???",
+				"%.2f kg · mejor venta %d monedas · %d capturas" % [record.get("weight", 0), record.get("value", 0), record.get("count", 0)] if known else "Sin capturas"]
+		if known:
+			species += "[color=#%s]%s[/color] · %s%s\n%s\n%s\n\n" % [main.RARITY[s.rarity].to_html(false), s.name, s.rarity, " · captura legendaria" if s.get("legend", false) else "", habitat(s, true), s.desc]
+		else:
+			species += "[color=#778899]??? · %s\n%s[/color]\n\n" % [habitat(s, false), "Captura legendaria: aún sin pescar" if s.get("legend", false) else "Aún sin pescar"]
+	species_view.text = "[b]Enciclopedia · %d/%d especies descubiertas[/b]\n\n%s" % [found, main.SPECIES.size(), species]
+	journal_view.text = "[b]Diario del Nereida · %d/%d notas[/b]\n\n" % [main.notes.size(), main.NOTES.size()]
+	for i in main.NOTES.size():
+		journal_view.text += "[color=#ffbf33]%s[/color]\n%s\n\n" % [main.NOTES[i].title, main.NOTES[i].text] if i in main.notes else "[color=#778899]Nota %d · sin encontrar[/color]\n\n" % (i + 1)
+	journal_view.text += "[b]Trofeos · %d/%d capturas legendarias[/b]\n\n" % [main.trophies.size(), main.ZONES]
+	for id in main.SPECIES.size():
+		if main.SPECIES[id].get("legend", false):
+			journal_view.text += "%s\n" % (main.SPECIES[id].name if id in main.trophies else "[color=#778899]??? · %s[/color]" % habitat(main.SPECIES[id], false))
 

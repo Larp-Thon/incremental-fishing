@@ -70,13 +70,17 @@ func add_part(parent: Node3D, mesh: PrimitiveMesh, pos: Vector3, color: Color) -
 
 
 func _process(delta: float) -> void:
-	var rest: Vector3 = player.global_transform * (HAND + Vector3(0, 0.045, 0.2))  # cola de la lanza cargada
+	# En el vehículo la lanza va en el fusil montado; con otra herramienta en la mano no se ve.
+	var hand: Vector3 = main.vehicle_mesh.MOUNT if main.vehicle_active else HAND
+	visible = main.tool == 0
+	gun.visible = visible and not main.vehicle_active
+	var rest: Vector3 = player.global_transform * (hand + Vector3(0, 0.045, 0.2))  # cola de la lanza cargada
 	var reel: float = 1.0 + 0.25 * main.lvl("reel")
 	gun.position = HAND + Vector3(0, 0.02, 0.1) * player.kick  # retroceso
 	match state:
 		HELD:
 			global_transform = Transform3D(player.global_basis, rest)
-			if not player.locked and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
+			if visible and not player.locked and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
 					and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 				state = OUT
 				dir = -player.global_basis.z
@@ -126,7 +130,7 @@ func _process(delta: float) -> void:
 				state = HELD
 
 	# Sedal: de la boca del fusil a la cola de la lanza. Con un pez tirando se tensa: más grueso y anaranjado.
-	var muzzle: Vector3 = player.global_transform * (HAND + Vector3(0, 0.045, -0.25))
+	var muzzle: Vector3 = player.global_transform * (hand + Vector3(0, 0.045, -0.25))
 	var length := muzzle.distance_to(global_position)
 	rope.visible = state != HELD and length > 0.05
 	if rope.visible:

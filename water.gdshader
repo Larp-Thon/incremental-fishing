@@ -2,6 +2,7 @@ shader_type spatial;
 render_mode cull_disabled;
 // Un solo plano para las dos caras: por arriba agua con ondas, por abajo el brillo de la superficie.
 
+uniform float dim = 1.0;  // 1 = pleno día; baja de noche y con tormenta
 varying vec3 wpos;
 
 void vertex() {
@@ -18,6 +19,6 @@ void fragment() {
 		ROUGHNESS = 0.15;
 	} else {
 		ALBEDO = vec3(0.0);
-		EMISSION = vec3(0.7, 0.95, 1.0) * (0.85 + 0.06 * (dx + dz));
+		EMISSION = vec3(0.7, 0.95, 1.0) * (0.85 + 0.06 * (dx + dz)) * dim;
 	}
 }

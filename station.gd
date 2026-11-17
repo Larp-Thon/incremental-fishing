@@ -43,6 +43,13 @@ func part(mesh: PrimitiveMesh, size: Vector3, pos: Vector3, color: Color, glow :
 		body.add_child(c)
 
 
+# Trofeo de una captura legendaria: un pez del color de la especie sobre un poste, en el borde de la cubierta.
+func add_trophy(slot: int, color: Color) -> void:
+	var x := -2.5 + slot
+	part(CylinderMesh.new(), Vector3(0.05, 0.35, 0.05), Vector3(x, 0.8, 3.2), Color(0.8, 0.8, 0.82))
+	part(SphereMesh.new(), Vector3(0.6, 0.26, 0.14), Vector3(x, 1.28, 3.2), color, 1.2)
+
+
 func add_module(module_id: String, level: int) -> void:
 	var previous := int(modules.get(module_id, 0))
 	if level <= previous:

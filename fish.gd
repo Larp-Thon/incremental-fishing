@@ -12,6 +12,9 @@ var fear := 0.0  # segundos que le quedan huyendo del buzo
 var leader: Node3D  # cardumen: sigue a este pez
 var offset := Vector3.ZERO  # su sitio dentro del cardumen
 var hp := 1
+var max_hp := 1
+var heal := INF  # legendarias: segundos sin recibir impacto hasta recuperar toda la resistencia
+var home := Vector3.ZERO  # centro del sitio (arrecife, pecio, cueva) de las especies con "site"
 var generation := 0
 var shelter := Vector3.ZERO
 var refuge: MeshInstance3D
@@ -39,17 +42,19 @@ func respawn() -> void:
 	attack_time = 0.0
 	hooked = false
 	fear = 0.0
-	hp = int(species.get("resistance", 1))
+	max_hp = int(species.get("resistance", 1))
+	hp = max_hp
 	hidden = false
 	var size_factor := randf_range(0.75, 1.3)
 	catch_weight = maxf(0.1, float(species.big) * size_factor)
 	var quality_roll := randf()
 	var rare_bonus: float = float(main.lvl("lab")) * 0.025
 	catch_quality = "Colosal" if size_factor > 1.2 else ("Pequeño" if size_factor < 0.85 else "Estándar")
-	if quality_roll < 0.025 + rare_bonus * 0.35:
+	var luck := 3.0 if main.event == "storm" else 1.0  # la tormenta saca a las variantes raras
+	if quality_roll < (0.025 + rare_bonus * 0.35) * luck:
 		catch_quality = "Albino"
 		set_instance_shader_parameter("color", Color(0.95, 0.92, 0.82))
-	elif quality_roll < 0.075 + rare_bonus:
+	elif quality_roll < (0.075 + rare_bonus) * luck:
 		catch_quality = "Dorado"
 		set_instance_shader_parameter("color", Color(1.0, 0.73, 0.18))
 	catch_price = int(round(float(species.value) * size_factor * (1.0 if catch_quality == "Estándar" or catch_quality == "Pequeño" or catch_quality == "Colosal" else 3.0)))
@@ -59,6 +64,9 @@ func respawn() -> void:
 	# Viven cerca del fondo de su zona.
 	position = world.spot(zone) + Vector3.UP * randf_range(3.0, 12.0)
 	position.y = minf(position.y, -2.0)
+	if species.has("site"):
+		home = world.sites[species.site]
+		position = home + Vector3(randf_range(-7.0, 7.0), randf_range(-2.0, 2.0), randf_range(-7.0, 7.0))
 	if leader:
 		offset = Vector3(randf_range(-2.5, 2.5), randf_range(-1.2, 1.2), randf_range(-2.5, 2.5))
 		position = leader.position + offset
@@ -90,6 +98,10 @@ func _process(delta: float) -> void:
 		rotation.y += sin(Time.get_ticks_msec() * 0.04) * 10.0 * delta  # forcejea en el sedal
 		return
 	var behavior: String = species.get("behavior", "wander")
+	if hp < max_hp:
+		heal -= delta
+		if heal <= 0.0:
+			hp = max_hp
 	action_timer = maxf(action_timer - delta, 0.0)
 	fear = maxf(fear - delta, 0.0)
 	conceal_time = maxf(conceal_time - delta, 0.0)
@@ -100,7 +112,7 @@ func _process(delta: float) -> void:
 		hidden = false
 		visible = true
 		action_timer = 5.0
-	if species_id in [7, 10] and main.lamp_on and main.lvl("lamp") > 0 and distance < 18.0:
+	if species.get("dark", false) and main.lamp_on and main.lvl("lamp") > 0 and distance < 18.0:
 		main.hint("light_fish", "Pez linterna y calamar vampiro evitan la luz.\n[%s] apaga la linterna para acercarte." % main.key_name("lamp"))
 		fear = 1.0
 		if distance < 7.0 and action_timer <= 0:
@@ -111,11 +123,12 @@ func _process(delta: float) -> void:
 	var speed := 2.0
 	var want := Vector3.ZERO  # hacia dónde quiere ir; cero = deambular
 	var d := -position.z
-	if absf(position.x) > world.HALF_WIDTH - MARGIN or d < world.BOUNDS[zone] + MARGIN or d > world.BOUNDS[zone + 1] - MARGIN:
-		want = Vector3(-position.x, 0.0, -(world.BOUNDS[zone] + world.BOUNDS[zone + 1]) * 0.5 - position.z)  # vuelve al centro de su zona
+	var sited: bool = species.has("site")  # vive en un sitio (arrecife, pecio, cueva) en vez de en toda la zona
+	if position.distance_to(home) > 9.0 if sited else (absf(position.x) > world.HALF_WIDTH - MARGIN or d < world.BOUNDS[zone] + MARGIN or d > world.BOUNDS[zone + 1] - MARGIN):
+		want = home - position if sited else Vector3(-position.x, 0.0, -(world.BOUNDS[zone] + world.BOUNDS[zone + 1]) * 0.5 - position.z)  # vuelve a su sitio o al centro de su zona
 	elif fear > 0.0 or (behavior == "shy" and position.distance_to(main.player.position) < 12.0):
 		want = position - main.player.position
-		speed = 5.5
+		speed = float(species.get("flee", 5.5))
 	elif behavior == "ambush" and distance < 14.0:
 		main.hint("predator", "El brillo anuncia una embestida. Apártate o acierta con el arpón.\nEl golpe hace perder oxígeno.")
 		want = main.player.position - position
@@ -123,7 +136,7 @@ func _process(delta: float) -> void:
 		speed = 0.5 if attack_time < 1.2 else 9.0
 		set_instance_shader_parameter("glow", 2.5 if attack_time < 1.2 else species.glow)
 		if attack_time >= 1.2 and distance < 1.8:
-			main.hurt(5.0, str(species.name) + " te embistió")
+			main.hurt(float(species.get("bite", 5.0)), str(species.name) + " te embistió")
 			fear = 3.0
 		if attack_time > 2.0:
 			attack_time = 0.0
@@ -162,6 +175,9 @@ func take_harpoon_hit(strength := 1) -> bool:
 		hooked = true
 		return true
 	fear = 2.0
+	if species.has("regen"):
+		heal = float(species.regen)
+		main.hint("legend", "Las capturas legendarias recuperan fuerzas si tardas entre impactos.\nEncadena los arponazos: carrete, red y sedal ayudan.")
 	return false
 
 

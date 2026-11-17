@@ -18,7 +18,7 @@ const SUIT_STEP := 0.4  # atm de soporte por nivel de traje: 5 niveles = una zon
 const CRUSH_OVER := 2.0  # atm por encima del soporte a partir de las que salta el aviso grande
 const SUIT_BASE_COST := [30, 150, 450, 1300, 4000]  # coste base de cada tramo de 5 niveles
 # Teclas por defecto; se registran en el InputMap al arrancar y se cambian desde el menú.
-const KEYS := {forward = KEY_W, back = KEY_S, left = KEY_A, right = KEY_D, up = KEY_SPACE, down = KEY_CTRL, use = KEY_E, vehicle = KEY_V, sonar = KEY_R, lamp = KEY_F}
+const KEYS := {forward = KEY_W, back = KEY_S, left = KEY_A, right = KEY_D, up = KEY_SPACE, down = KEY_CTRL, use = KEY_E, vehicle = KEY_V, lamp = KEY_F, tool1 = KEY_1, tool2 = KEY_2}
 
 const CYAN := Color(0.35, 0.85, 1.0)
 const GREEN := Color(0.4, 0.9, 0.5)
@@ -37,25 +37,60 @@ const RARITY := {
 }
 
 # zone: zona (0-5) donde vive, cerca del fondo; -1 = cualquiera. big: escala. count: cuántos hay.
-# power: efecto instantáneo al pescarlo (no se vende).
+# power: efecto instantáneo al pescarlo (no se vende). desc: texto de la enciclopedia.
+# site: vive en un sitio de world.sites. night: solo sale de noche. dark: evita la linterna.
+# legend: captura legendaria (una por zona, deja trofeo); regen: segundos sin impacto hasta recuperarse.
+# Las especies nuevas van SIEMPRE al final: récords y trofeos guardan el índice.
 const SPECIES := [
-	{name = "Anchoa", rarity = "Común", value = 1, zone = 0, color = Color(0.6, 0.78, 0.75), big = 0.45, glow = 0.0, count = 24, school = true},
-	{name = "Sardina", rarity = "Común", value = 1, zone = 0, color = Color(0.75, 0.8, 0.85), big = 0.6, glow = 0.0, count = 26, school = true},
-	{name = "Jurel", rarity = "Común", value = 2, zone = 0, color = Color(0.4, 0.6, 0.5), big = 0.8, glow = 0.0, count = 16},
-	{name = "Dorada", rarity = "Común", value = 5, zone = 1, color = Color(0.95, 0.8, 0.3), big = 0.9, glow = 0.0, count = 20},
-	{name = "Pez loro", rarity = "Poco común", value = 8, zone = 1, color = Color(0.2, 0.8, 0.7), big = 1.0, glow = 0.0, count = 16, behavior = "shy"},
-	{name = "Pez globo", rarity = "Poco común", value = 16, zone = 2, color = Color(0.95, 0.6, 0.4), big = 1.1, glow = 0.1, count = 18},
-	{name = "Barracuda", rarity = "Poco común", value = 24, zone = 2, color = Color(0.5, 0.6, 0.75), big = 1.6, glow = 0.1, count = 14, behavior = "ambush", resistance = 2},
-	{name = "Pez linterna", rarity = "Raro", value = 50, zone = 3, color = Color(0.3, 0.5, 1.0), big = 0.8, glow = 1.0, count = 16},
-	{name = "Morena", rarity = "Raro", value = 70, zone = 3, color = Color(0.45, 0.6, 0.25), big = 1.8, glow = 0.4, count = 12, behavior = "hide", resistance = 2},
-	{name = "Rape abisal", rarity = "Épico", value = 150, zone = 4, color = Color(0.7, 0.3, 0.9), big = 1.3, glow = 0.7, count = 14, behavior = "ambush", resistance = 2},
-	{name = "Calamar vampiro", rarity = "Épico", value = 200, zone = 4, color = Color(0.9, 0.2, 0.3), big = 1.5, glow = 0.7, count = 10},
-	{name = "Pez dragón", rarity = "Épico", value = 350, zone = 5, color = Color(0.2, 0.9, 0.6), big = 1.4, glow = 0.9, count = 12, behavior = "shy", resistance = 2},
-	{name = "Celacanto", rarity = "Legendario", value = 900, zone = 5, color = Color(1.0, 0.75, 0.2), big = 2.0, glow = 0.6, count = 3, resistance = 3},
+	{name = "Anchoa", rarity = "Común", value = 1, zone = 0, color = Color(0.6, 0.78, 0.75), big = 0.45, glow = 0.0, count = 24, school = true, desc = "Diminuta y nerviosa. Nada en bancos que huyen juntos."},
+	{name = "Sardina", rarity = "Común", value = 1, zone = 0, color = Color(0.75, 0.8, 0.85), big = 0.6, glow = 0.0, count = 26, school = true, desc = "El banco plateado del bajío. Fácil de ver, difícil de acertar."},
+	{name = "Jurel", rarity = "Común", value = 2, zone = 0, color = Color(0.4, 0.6, 0.5), big = 0.8, glow = 0.0, count = 16, desc = "Solitario y confiado. La primera captura de todo buzo."},
+	{name = "Dorada", rarity = "Común", value = 5, zone = 1, color = Color(0.95, 0.8, 0.3), big = 0.9, glow = 0.0, count = 20, desc = "Brilla entre las algas. Buen precio para tan poca profundidad."},
+	{name = "Pez loro", rarity = "Poco común", value = 8, zone = 1, color = Color(0.2, 0.8, 0.7), big = 1.0, glow = 0.0, count = 16, behavior = "shy", desc = "Huye en cuanto te acercas: dispara desde lejos."},
+	{name = "Pez globo", rarity = "Poco común", value = 16, zone = 2, color = Color(0.95, 0.6, 0.4), big = 1.1, glow = 0.1, count = 18, desc = "Lento y redondo. Se deja ver entre las rocas."},
+	{name = "Barracuda", rarity = "Poco común", value = 24, zone = 2, color = Color(0.5, 0.6, 0.75), big = 1.6, glow = 0.1, count = 14, behavior = "ambush", resistance = 2, desc = "Embiste tras un destello. Aguanta dos arponazos."},
+	{name = "Pez linterna", rarity = "Raro", value = 50, zone = 3, color = Color(0.3, 0.5, 1.0), big = 0.8, glow = 1.0, count = 16, dark = true, desc = "Evita la luz: apaga la linterna para acercarte."},
+	{name = "Morena", rarity = "Raro", value = 70, zone = 3, color = Color(0.45, 0.6, 0.25), big = 1.8, glow = 0.4, count = 12, behavior = "hide", resistance = 2, desc = "Se esconde en su guarida y solo asoma unos segundos."},
+	{name = "Rape abisal", rarity = "Épico", value = 150, zone = 4, color = Color(0.7, 0.3, 0.9), big = 1.3, glow = 0.7, count = 14, behavior = "ambush", resistance = 2, desc = "Cazador de las fumarolas. Su brillo avisa de la embestida."},
+	{name = "Calamar vampiro", rarity = "Épico", value = 200, zone = 4, color = Color(0.9, 0.2, 0.3), big = 1.5, glow = 0.7, count = 10, dark = true, desc = "Odia la luz y desaparece si lo alumbras."},
+	{name = "Pez dragón", rarity = "Épico", value = 350, zone = 5, color = Color(0.2, 0.9, 0.6), big = 1.4, glow = 0.9, count = 12, behavior = "shy", resistance = 2, desc = "Huidizo y resistente. Hay que acorralarlo."},
+	{name = "Celacanto", rarity = "Legendario", value = 900, zone = 5, color = Color(1.0, 0.75, 0.2), big = 2.0, glow = 0.6, count = 3, resistance = 3, desc = "Un fósil vivo. Tres arponazos y una fortuna."},
 	# Powerups: siempre disponibles, escasos.
-	{name = "Pez burbuja", rarity = "Especial", value = 0, zone = -1, color = Color(0.5, 1.0, 1.0), big = 0.7, glow = 1.5, count = 5, power = "air"},
-	{name = "Pez rayo", rarity = "Especial", value = 0, zone = -1, color = Color(1.0, 1.0, 0.3), big = 0.7, glow = 1.5, count = 5, power = "speed"},
+	{name = "Pez burbuja", rarity = "Especial", value = 0, zone = -1, color = Color(0.5, 1.0, 1.0), big = 0.7, glow = 1.5, count = 5, power = "air", desc = "No se vende: da aire infinito unos segundos."},
+	{name = "Pez rayo", rarity = "Especial", value = 0, zone = -1, color = Color(1.0, 1.0, 0.3), big = 0.7, glow = 1.5, count = 5, power = "speed", desc = "No se vende: da velocidad extra unos segundos."},
+	# Arrecife secreto.
+	{name = "Pez mandarín", rarity = "Raro", value = 30, zone = 1, color = Color(1.0, 0.5, 0.1), big = 0.7, glow = 0.5, count = 8, site = "reef", desc = "Colores imposibles. Solo vive en un rincón escondido tras las algas."},
+	# Nocturnas: solo aparecen los días de evento "Noche".
+	{name = "Pez luna", rarity = "Raro", value = 12, zone = 0, color = Color(0.85, 0.9, 1.0), big = 1.5, glow = 1.2, count = 8, night = true, desc = "Sube al bajío cuando oscurece. Enorme, pálido y tranquilo."},
+	{name = "Calamar luciérnaga", rarity = "Raro", value = 30, zone = 1, color = Color(0.4, 0.75, 1.0), big = 0.7, glow = 1.6, count = 8, night = true, behavior = "shy", desc = "Un punto de luz azul entre las algas. Asustadizo."},
+	{name = "Pez víbora", rarity = "Épico", value = 180, zone = 3, color = Color(0.7, 1.0, 0.4), big = 1.2, glow = 1.4, count = 6, night = true, behavior = "ambush", resistance = 2, desc = "Caza de noche en el jardín luminoso. Embiste sin dudar."},
+	# Capturas legendarias: una por zona.
+	{name = "Mero gigante", rarity = "Legendario", value = 40, zone = 0, color = Color(0.55, 0.45, 0.3), big = 2.6, glow = 0.3, count = 1, legend = true, resistance = 4, regen = 8.0, desc = "El abuelo del bajío. Lento, pero aguanta cuatro arponazos seguidos."},
+	{name = "Pez vela", rarity = "Legendario", value = 120, zone = 1, color = Color(0.25, 0.4, 0.95), big = 2.4, glow = 0.4, count = 1, legend = true, behavior = "shy", flee = 9.0, resistance = 3, regen = 12.0, desc = "El más rápido del cañón. Sin sedal largo o vehículo no lo alcanzas."},
+	{name = "Tiburón del pecio", rarity = "Legendario", value = 400, zone = 2, color = Color(0.6, 0.65, 0.7), big = 3.2, glow = 0.3, count = 1, legend = true, site = "wreck", behavior = "ambush", bite = 8.0, resistance = 5, regen = 8.0, desc = "Guarda el barco hundido y embiste a quien se acerca."},
+	{name = "Morena ancestral", rarity = "Legendario", value = 1200, zone = 3, color = Color(0.3, 0.9, 0.5), big = 3.0, glow = 0.8, count = 1, legend = true, site = "cave", behavior = "hide", resistance = 5, regen = 10.0, desc = "Duerme en la cueva de cristal y solo asoma unos segundos."},
+	{name = "Calamar gigante", rarity = "Legendario", value = 3500, zone = 4, color = Color(0.85, 0.15, 0.25), big = 3.4, glow = 0.5, count = 1, legend = true, dark = true, resistance = 6, regen = 8.0, desc = "Desaparece con la luz: hay que cazarlo a oscuras entre las fumarolas."},
+	{name = "Leviatán", rarity = "Legendario", value = 12000, zone = 5, color = Color(0.5, 0.3, 1.0), big = 4.5, glow = 1.0, count = 1, legend = true, behavior = "ambush", bite = 10.0, resistance = 8, regen = 7.0, desc = "El señor de la fosa. Ocho arponazos sin darle un respiro."},
 ]
+
+# Diario del Nereida: notas repartidas por el cañón (posiciones en world.build_sites).
+const NOTES := [
+	{title = "Bitácora del Nereida · 1", text = "Día 3. El hidrófono capta un pulso regular que sube del fondo del cañón. No es un animal ni una máquina nuestra. Mañana bajamos."},
+	{title = "Bitácora del Nereida · 2", text = "Tras las algas de la pared oeste hay una grieta. Dentro, un arrecife intacto, lleno de color. El pulso se oye también ahí, más débil."},
+	{title = "Bitácora del Nereida · 3", text = "Los peces mandarín solo viven en este rincón. Marta dice que la señal los calma. A mí me quita el sueño."},
+	{title = "Bitácora del Nereida · 4", text = "La tormenta partió el Nereida y se fue a pique sobre el roquedal. Seguimos con los trajes: el pulso viene de más abajo."},
+	{title = "Bitácora del Nereida · 5", text = "En la pared este del jardín luminoso se abre una cueva de cristal. Algo enorme duerme dentro. Los cristales vibran al ritmo del pulso."},
+	{title = "Bitácora del Nereida · 6", text = "El calor de las fumarolas funde los sellos del traje. Ya solo quedo yo. El pulso se siente en el pecho."},
+	{title = "Bitácora del Nereida · 7", text = "La fosa. Las agujas de cristal apuntan todas al mismo sitio, al final del cañón. No me queda aire para volver. Ha valido la pena."},
+	{title = "El Latido", text = "Un corazón de cristal del tamaño de una casa, latiendo con luz. Lleva aquí más tiempo que el mar. Ahora tú también lo has visto."},
+]
+
+# Eventos del día: a partir del día 3, algunos días traen uno.
+const EVENTS := {
+	storm = {name = "Tormenta", text = "poca visibilidad, más variantes raras"},
+	night = {name = "Noche", text = "salen especies nocturnas"},
+	migration = {name = "Migración", text = ""},
+}
 
 var upgrades := {
 	tank = {name = "Tanque de oxígeno", desc = "+6 s de día", base = 10, growth = 1.6, level = 0},
@@ -66,7 +101,7 @@ var upgrades := {
 	scooter = {name = "Scooter submarino", desc = "Velocidad x1,7 · batería 25 s", base = 220, growth = 1.0, level = 0, max = 1},
 	sub = {name = "Minisubmarino", desc = "Velocidad x2,2 · batería 50 s", base = 1800, growth = 1.0, level = 0, max = 1},
 	lamp = {name = "Linterna", desc = "Ilumina el entorno cercano", base = 90, growth = 1.8, level = 0, max = 3},
-	sonar = {name = "Sonar", desc = "Mejores capturas por zona · más objetivos y barridos más rápidos", base = 160, growth = 1.8, level = 0, max = 3},
+	sonar = {name = "Sonar", desc = "Herramienta de mano: elige una especie y lanza sondas · 1 objetivo y +5 s de marca por nivel", base = 160, growth = 1.8, level = 0, max = 3},
 	net = {name = "Arpón de red", desc = "Cada impacto cuenta como 2 arponazos", base = 280, growth = 1.0, level = 0, max = 1},
 	hunter = {name = "Especialidad: Cazador", desc = "+20% valor de venta · excluye Explorador", base = 500, growth = 1.0, level = 0, max = 1},
 	scout = {name = "Especialidad: Explorador", desc = "+30% batería y oxígeno · excluye Cazador", base = 500, growth = 1.0, level = 0, max = 1},
@@ -79,6 +114,11 @@ var upgrades := {
 const RECIPES := {bag = 1, scooter = 0, sub = 2, lamp = 0, sonar = 1, net = 2, aquarium = 0, lab = 3, traps = 4, stabilizer = 5}
 const MAX_PRESTIGE_SUIT := (ZONES - 1) * 5
 var records := {}
+var notes := []  # índices de NOTES ya leídas
+var trophies := []  # índices de SPECIES de las legendarias capturadas alguna vez
+var event := ""  # clave de EVENTS o "" en un día normal
+var migrant := -1  # especie con el doble de ejemplares en una migración
+var fauna: Node3D
 var damage_cooldown := 0.0
 var lamp_on := true
 var sonar_system: Node
@@ -96,8 +136,7 @@ var contract_caught := 0
 var prestige_count := 0
 var vehicle_battery := 0.0
 var vehicle_active := false
-var sonar_cooldown := 12.0
-var sonar_manual_wait := 0.0
+var tool := 0  # herramienta en la mano: 0 = arpón, 1 = sonar
 var passive_caught := 0
 var vehicle_mesh: Node3D
 var lamp_light: OmniLight3D
@@ -110,7 +149,6 @@ var fish_mesh := SphereMesh.new()
 var toast_tween: Tween
 var hint_tween: Tween
 var settings := {sens = 0.003, volume = 0.8, binds = {}}
-var found := [0, 0, 0, 0, 0, 0]  # materiales ya recogidos del mundo, por zona (no reaparecen)
 var hints := []  # consejos del tutorial que ya salieron
 var breath := 0.0  # segundos hasta la siguiente respiración
 var was_under := false
@@ -278,7 +316,7 @@ func game_state() -> Dictionary:
 	for id in upgrades:
 		levels[id] = lvl(id)
 	# Un día a medias no cuenta: al cargar se repite.
-	return {coins = coins, day = day - int(playing), levels = levels, mats = mats, found = found, hints = hints, prestige = prestige_count, records = records}
+	return {coins = coins, day = day - int(playing), levels = levels, mats = mats, hints = hints, prestige = prestige_count, records = records, notes = notes, trophies = trophies}
 
 
 func save_game(game = null) -> void:
@@ -314,12 +352,15 @@ func load_game() -> void:
 	prestige_count = maxi(0, int(g.get("prestige", 0)))
 	if g.get("records") is Dictionary:
 		records = g.records
+	if g.get("notes") is Array:
+		notes = g.notes.map(func(v): return int(v))
+	if g.get("trophies") is Array:
+		trophies = g.trophies.map(func(v): return int(v))
 	var levels = g.get("levels")
 	if levels is Dictionary:
 		for id in upgrades:
 			upgrades[id].level = clampi(int(levels.get(id, 0)), 0, upgrades[id].get("max", 999))
 	ints(g.get("mats"), mats)
-	ints(g.get("found"), found)
 	if g.get("hints") is Array:
 		hints = g.hints
 
@@ -336,12 +377,16 @@ func hint(key: String, text: String) -> void:
 	if key in hints:
 		return
 	hints.append(key)
+	show_hint(text, 8.0)
+
+
+func show_hint(text: String, seconds: float) -> void:
 	hint_label.text = text
 	hint_label.modulate.a = 1.0
 	if hint_tween:
 		hint_tween.kill()
 	hint_tween = create_tween()
-	hint_tween.tween_interval(8.0)
+	hint_tween.tween_interval(seconds)
 	hint_tween.tween_property(hint_label, "modulate:a", 0.0, 1.0)
 
 
@@ -369,6 +414,8 @@ func _ready() -> void:
 	for module_id in ["aquarium", "lab", "traps"]:
 		station.add_module(module_id, lvl(module_id))
 	station.add_module("warehouse", lvl("bag"))
+	for id in trophies:
+		station.add_trophy(SPECIES[id].zone, SPECIES[id].color)
 	lamp_light.visible = lvl("lamp") > 0
 
 	terminal = preload("res://terminal.gd").new()
@@ -379,6 +426,12 @@ func _ready() -> void:
 	hazards = preload("res://hazards.gd").new()
 	add_child(hazards)
 	hazards.setup(self)
+	fauna = preload("res://fauna.gd").new()
+	add_child(fauna)
+	fauna.setup(self)
+	var hotbar: HBoxContainer = preload("res://hotbar.gd").new()
+	$HUD.add_child(hotbar)
+	hotbar.setup(self)
 	$HUD/Shop/Margin/Summary/Next.pressed.connect(show_upgrades)
 	start_button.pressed.connect(start_day)
 	prestige_button.pressed.connect(confirm_prestige)
@@ -392,12 +445,14 @@ func _ready() -> void:
 	gauge.zone_size = ZONE
 	start_day()
 
-	# Solo para capturas automáticas: godot -- cam=x,y,z,pitch,yaw (grados) | catch | end | shop
+	# Solo para capturas automáticas: godot -- cam=x,y,z,pitch,yaw (grados) | catch | end | shop | event=night
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("cam="):
 			var v := a.trim_prefix("cam=").split_floats(",")
 			player.position = Vector3(v[0], v[1], v[2])
 			player.rotation_degrees = Vector3(v[3], v[4], 0.0)
+		elif a.begins_with("event="):
+			start_day(a.trim_prefix("event="))
 		elif a == "catch":
 			for f in get_tree().get_nodes_in_group("fish").slice(20, 32):
 				catch_fish(f)
@@ -420,31 +475,11 @@ func create_gear_visuals() -> void:
 	lamp_light.omni_range = 20.0
 	lamp_light.visible = false
 	cam.add_child(lamp_light)
-	vehicle_mesh = Node3D.new()
-	vehicle_mesh.position = Vector3(0.0, -0.35, -0.8)
+	vehicle_mesh = preload("res://vehicle.gd").new()
+	vehicle_mesh.main = self
 	vehicle_mesh.visible = false
-	if lvl("sub") > 0:
-		vehicle_mesh.scale = Vector3(1.45, 1.35, 1.8)
 	player.add_child(vehicle_mesh)
-	var body_mesh := SphereMesh.new()
-	body_mesh.radius = 0.38
-	body_mesh.height = 1.3
-	add_gear_part(vehicle_mesh, body_mesh, Vector3(0, 0, 0), Vector3(0.65, 0.5, 1.7), Color(0.95, 0.42, 0.14))
-	add_gear_part(vehicle_mesh, BoxMesh.new(), Vector3(0, -0.25, 0.15), Vector3(1.6, 0.12, 0.25), Color(0.17, 0.2, 0.24))
-	add_gear_part(vehicle_mesh, SphereMesh.new(), Vector3(0, 0.2, -0.55), Vector3(0.24, 0.24, 0.24), Color(0.3, 0.95, 1.0))
-
-
-func add_gear_part(parent: Node3D, mesh: PrimitiveMesh, pos: Vector3, size: Vector3, color: Color) -> void:
-	var part := MeshInstance3D.new()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.metallic = 0.35
-	mat.roughness = 0.3
-	mesh.material = mat
-	part.mesh = mesh
-	part.position = pos
-	part.scale = size
-	parent.add_child(part)
+	vehicle_mesh.set_sub(lvl("sub") > 0)
 
 
 # Los peces a menos de "radius" metros huyen del buzo unos segundos.
@@ -458,8 +493,10 @@ func spawn_fish() -> void:
 	for f in get_tree().get_nodes_in_group("fish"):
 		f.free()
 	for id in SPECIES.size():
+		if SPECIES[id].get("night", false) and event != "night":
+			continue
 		var leader: Node3D = null
-		for i in SPECIES[id].count:
+		for i in SPECIES[id].count * (2 if id == migrant else 1):
 			var f: MeshInstance3D = FISH.new()
 			f.mesh = fish_mesh
 			f.species_id = id
@@ -472,11 +509,17 @@ func spawn_fish() -> void:
 			add_child(f)
 
 
-func start_day() -> void:
+# forced: evento impuesto (pruebas y capturas); vacío = sorteo.
+func start_day(forced := "") -> void:
 	sonar_system.clear()
 	damage_cooldown = 0.0
-	sonar_manual_wait = 0.0
+	tool = 0
+	world.respawn_pickups()
 	day += 1
+	event = forced
+	if forced == "" and day > 2 and randf() < 0.4:  # los dos primeros días son tranquilos: tutorial
+		event = EVENTS.keys().pick_random()
+	migrant = randi_range(0, 12) if event == "migration" else -1
 	oxygen = max_oxygen()
 	air_time = 0.0
 	speed_time = 0.0
@@ -494,7 +537,6 @@ func start_day() -> void:
 	vehicle_active = false
 	vehicle_battery = max_vehicle_battery()
 	vehicle_mesh.visible = false
-	sonar_cooldown = 0.0
 	refresh_bag()
 	spawn_fish()
 	harpoon.reset()
@@ -507,7 +549,10 @@ func start_day() -> void:
 	helmet.material.set_shader_parameter("rim_color", SUIT_COLORS[floori(float(lvl("suit")) / 5.0)])
 	playing = true
 	refresh_bag()
-	show_toast("Día %d" % day, Color.WHITE)
+	var news := ""
+	if event != "":
+		news = "\n%s · %s" % [EVENTS[event].name, "bancos enormes de " + SPECIES[migrant].name if migrant >= 0 else EVENTS[event].text]
+	show_toast("Día %d%s" % [day, news], Color.WHITE)
 	hint("start", "Nada hacia delante y baja por el cañón: cuanto más hondo, más valen los peces.\nClic para disparar el arpón. El día dura lo que dure tu oxígeno.")
 
 
@@ -587,7 +632,7 @@ func buy(id: String) -> void:
 		if id == "lamp":
 			lamp_light.visible = true
 		if id == "sub":
-			vehicle_mesh.scale = Vector3(1.45, 1.35, 1.8)
+			vehicle_mesh.set_sub(true)
 		sfx.play("coin")
 		refresh_shop()
 		save_game()
@@ -609,6 +654,8 @@ func show_toast(text: String, color: Color) -> void:
 
 func catch_fish(fish: Node) -> void:
 	var s: Dictionary = fish.species
+	if s.has("power"):
+		record_capture(fish.species_id, fish.catch_weight, 0)  # cuenta como descubierto en la enciclopedia
 	match s.get("power", ""):
 		"air":
 			air_time = POWER_SECONDS
@@ -623,12 +670,29 @@ func catch_fish(fish: Node) -> void:
 				fish.respawn()
 				return
 			record_capture(fish.species_id, fish.catch_weight, sold_for)
-			save_game()
 			show_toast("%s · %s\n%.1f kg  ·  %d monedas · mercado %d%%" % [s.name, fish.catch_quality, fish.catch_weight, sold_for, int(100.0 * prices[fish.species_id] / maxf(float(s.value), 1.0))], RARITY[s.rarity])
+			if s.get("legend", false) and not fish.species_id in trophies:
+				trophies.append(fish.species_id)
+				station.add_trophy(s.zone, s.color)
+				show_toast("¡Captura legendaria! %s · %d monedas\nSu trofeo queda en la estación" % [s.name, sold_for], AMBER)
+			save_game()
 			refresh_bag()
 	show_float("+%s · %s" % [s.name, fish.catch_quality], fish.global_position, RARITY[s.rarity])
 	sfx.play("catch")
 	fish.respawn()
+
+
+func collect_note(node: MeshInstance3D) -> void:
+	var i: int = node.get_meta("note")
+	world.notes.erase(node)
+	node.get_meta("beam").queue_free()
+	node.queue_free()
+	notes.append(i)
+	show_hint("%s  (%d/%d)\n%s" % [NOTES[i].title, notes.size(), NOTES.size(), NOTES[i].text], 14.0)
+	if notes.size() == NOTES.size():
+		show_toast("Diario completo", AMBER)
+	sfx.play("pickup")
+	save_game()
 
 
 func store_catch(species_id: int, value: int) -> bool:
@@ -656,7 +720,6 @@ func do_prestige() -> void:
 	for id in upgrades:
 		upgrades[id].level = 0
 	mats.fill(0)
-	found.fill(0)
 	save_game()
 	get_tree().reload_current_scene()
 
@@ -714,16 +777,37 @@ func refresh_bag() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
 		return
-	if playing and event.is_action_pressed("lamp"):
+	if not playing or player.locked:  # la pantalla del sonar bloquea el resto del equipo
+		return
+	if event.is_action_pressed("lamp"):
 		lamp_on = not lamp_on
-	if playing and event.is_action_pressed("sonar") and lvl("sonar") > 0 and player.position.y < 0 and sonar_manual_wait <= 0:
-		ping_sonar()
-		sonar_manual_wait = 3.0
-		sonar_cooldown = 15.0 - 3.0 * lvl("sonar")
-	if playing and event.is_action_pressed("vehicle"):
+	if event.is_action_pressed("tool1"):
+		select_tool(0)
+	if event.is_action_pressed("tool2"):
+		select_tool(1)
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and lvl("sonar") > 0:
+			select_tool(1 - tool)
+		elif event.button_index == MOUSE_BUTTON_LEFT and tool == 1:
+			sonar_system.open()
+	if event.is_action_pressed("vehicle"):
 		toggle_vehicle()
-	if playing and near_station() and event.is_action_pressed("use"):
+	if near_station() and event.is_action_pressed("use"):
 		end_day()
+
+
+# Inventario: 0 = arpón, 1 = sonar. No se cambia con la lanza fuera ni conduciendo el vehículo.
+func select_tool(index: int) -> void:
+	if index == tool or harpoon.state != harpoon.HELD:
+		return
+	if index == 1 and lvl("sonar") == 0:
+		show_toast("Compra el sonar en la terminal para usarlo", AMBER)
+		return
+	if vehicle_active:
+		show_toast("En el vehículo solo puedes usar su arpón", AMBER)
+		return
+	tool = index
+	sfx.play("tick")
 
 
 func toggle_vehicle() -> void:
@@ -737,6 +821,7 @@ func toggle_vehicle() -> void:
 	elif vehicle_battery > 1.0:
 		vehicle_active = true
 		vehicle_mesh.visible = true
+		tool = 0  # las dos manos van al manillar: se dispara el arpón montado
 		show_toast("Minisubmarino activo" if lvl("sub") > 0 else "Scooter activo", CYAN)
 	else:
 		show_toast("Batería agotada · recarga en la superficie", AMBER)
@@ -794,10 +879,6 @@ func purchase_blocker(id: String) -> String:
 	return ""
 
 
-func ping_sonar() -> void:
-	sonar_system.scan()
-
-
 func _process(delta: float) -> void:
 	var y := player.position.y
 	var under := y < 0.0
@@ -806,7 +887,6 @@ func _process(delta: float) -> void:
 	var over := pressure(depth) - support()
 	if playing:
 		damage_cooldown = maxf(0.0, damage_cooldown - delta)
-		sonar_manual_wait = maxf(0.0, sonar_manual_wait - delta)
 		if vehicle_active:
 			vehicle_battery = maxf(vehicle_battery - delta, 0.0)
 			if vehicle_battery <= 0.0:
@@ -818,11 +898,6 @@ func _process(delta: float) -> void:
 		if lamp_light:
 			lamp_light.visible = lvl("lamp") > 0 and under and lamp_on
 			lamp_light.omni_range = 16.0 + 4.0 * lvl("lamp")
-		if under and lvl("sonar") > 0:
-			sonar_cooldown -= delta
-			if sonar_cooldown <= 0.0:
-				sonar_cooldown = 15.0 - 3.0 * lvl("sonar")
-				ping_sonar()
 		air_time = maxf(air_time - delta, 0.0)
 		speed_time = maxf(speed_time - delta, 0.0)
 		if y < 0.0 and air_time <= 0.0:
@@ -844,36 +919,44 @@ func _process(delta: float) -> void:
 			if p.position.distance_to(player.position) < 2.5:
 				var zone: int = p.get_meta("zone")
 				mats[zone] += 1
-				found[zone] += 1
 				world.pickups.erase(p)
 				p.queue_free()
 				var m: Dictionary = world.MATERIALS[zone]
-				show_toast("%s\nMaterial para mejorar el traje  ·  tienes %d" % [m.name, mats[zone]], m.color)
-				hint("mat", "Los materiales se gastan en la tienda para mejorar el traje. No reaparecen.")
+				show_toast("%s\nMaterial de mejoras  ·  tienes %d" % [m.name, mats[zone]], m.color)
+				hint("mat", "Los materiales se gastan en la terminal: traje y recetas de equipo. Reaparecen cada día.")
 				sfx.play("pickup")
 				save_game()
+				break
+		for n in world.notes:
+			if n.position.distance_to(player.position) < 2.5:
+				collect_note(n)
 				break
 
 	# Bajo el agua: color de fondo + niebla, y cada vez menos luz. Fuera: cielo y sin niebla.
 	if was_under and not under:
 		helmet_wet = 1.0
 	was_under = under
-	helmet_wet = maxf(helmet_wet - delta * 0.13, 0.0)
+	helmet_wet = maxf(helmet_wet - delta * 0.33, 0.0)  # las gotas duran unos 3 s
+	cam.fov = lerpf(cam.fov, 82.0 if vehicle_active else 75.0, 4.0 * delta)
 	if under != env.fog_enabled:
 		env.fog_enabled = under
 		env.background_mode = Environment.BG_COLOR if under else Environment.BG_SKY
 	var t := clampf(depth / MAX_DEPTH, 0.0, 1.0)
-	var c := SHALLOW.lerp(DEEP, sqrt(t))
+	var dim := 0.45 if event == "night" else (0.6 if event == "storm" else 1.0)  # noche y tormenta oscurecen
+	var c := SHALLOW.lerp(DEEP, sqrt(t)).darkened(1.0 - dim)
 	env.background_color = c
 	env.fog_light_color = c
-	env.ambient_light_energy = lerpf(0.6, 0.12, t)
-	sun.light_energy = lerpf(1.0, 0.05, t)
+	env.fog_density = 0.07 if event == "storm" else 0.04
+	env.background_energy_multiplier = dim  # el cielo, fuera del agua
+	$Surface.mesh.material.set_shader_parameter("dim", dim)  # y el brillo de la superficie vista desde abajo
+	env.ambient_light_energy = lerpf(0.6, 0.12, t) * dim
+	sun.light_energy = lerpf(1.0, 0.05, t) * dim
 
 	# Casco: oxígeno, presión y zonas.
 	var blink := fmod(Time.get_ticks_msec() / 1000.0, 0.5) < 0.25
 	var low := playing and oxygen < LOW_OXYGEN and blink
 	var state := GREEN if over <= 0.0 else (AMBER if over < CRUSH_OVER else RED)
-	info.text = "Día %d  ·  %d monedas" % [day, coins]
+	info.text = "Día %d%s  ·  %d monedas" % [day, " · " + str(EVENTS[event].name) if event != "" else "", coins]
 	oxygen_label.text = "O2 %ds" % ceili(maxf(oxygen, 0.0))
 	oxygen_label.modulate = RED if low else Color.WHITE
 	oxygen_fill.bg_color = RED if low else CYAN
@@ -899,16 +982,12 @@ func _process(delta: float) -> void:
 	warning.modulate.a = 1.0 if blink else 0.45
 	status.visible = playing and over > 0.0 and over < CRUSH_OVER
 	status.text = "Resistencia de presión baja: gastas oxígeno x%.1f" % drain
-	power.visible = air_time > 0.0 or speed_time > 0.0 or lvl("scooter") > 0
+	power.visible = air_time > 0.0 or speed_time > 0.0
 	power.text = ""
 	if air_time > 0.0:
 		power.text += "Aire infinito %ds   " % ceili(air_time)
 	if speed_time > 0.0:
 		power.text += "Velocidad extra %ds" % ceili(speed_time)
-	if lvl("scooter") > 0:
-		if not power.text.is_empty():
-			power.text += "   "
-		power.text += "%s %.0f%% [V]" % ["Sub" if lvl("sub") > 0 else "Scooter", vehicle_battery / max_vehicle_battery() * 100.0]
 	mats_label.text = ""
 	for i in mats.size():
 		if mats[i] > 0:
